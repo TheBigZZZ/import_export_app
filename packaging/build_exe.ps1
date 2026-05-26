@@ -1,6 +1,6 @@
 Param(
     [string]$DistDir = "dist",
-    [string]$Spec = "packaging/pyinstaller/tradedesk.spec",
+    [string]$Spec = "packaging/tradedesk.spec",
     [switch]$OneFile = $true
 )
 
