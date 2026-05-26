@@ -91,6 +91,24 @@ jobs:
         run: python -m pip install safety
       - name: Run Safety vulnerability check
         run: |
+          # Normalize requirements file encoding to UTF-8 (some files may be UTF-16)
+          python - <<'PY'
+            import sys
+            from pathlib import Path
+            p=Path('packaging/requirements-pinned.txt')
+            if p.exists():
+                b=p.read_bytes()
+                for enc in ('utf-8','utf-16','utf-16-le','utf-16-be','latin1'):
+                    try:
+                        s=b.decode(enc)
+                        p.write_text(s,encoding='utf-8')
+                        print('Converted requirements from',enc)
+                        break
+                    except Exception:
+                        pass
+            else:
+                print('requirements-pinned.txt not found; skipping normalization')
+          PY
           # The safety CLI in some runner images does not support --severity; run default check
           safety check --file=packaging/requirements-pinned.txt --full-report
 
@@ -157,7 +175,7 @@ jobs:
         shell: powershell
         run: |
           if (-not $env:EXE_PATH) { Write-Host 'EXE_PATH not set; will attempt to locate exe inside dist'; }
-          powershell -ExecutionPolicy Bypass -File .\scripts\smoke_test.ps1 -ExePath $env:EXE_PATH -HealthUrl http://127.0.0.1:8742/health -Timeout 60
+          powershell -ExecutionPolicy Bypass -File .\scripts\smoke_test.ps1 -ExePath "$env:EXE_PATH" -HealthUrl http://127.0.0.1:8742/health -Timeout 60
       - name: Upload smoke test log
         if: always()
         uses: actions/upload-artifact@v4

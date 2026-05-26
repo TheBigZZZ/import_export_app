@@ -5,6 +5,14 @@ param(
 
 $ErrorActionPreference = "Stop"
 
+# Locate a PyInstaller spec file under packaging
+$specCandidates = Get-ChildItem -Path .\packaging -Filter *.spec -Recurse -ErrorAction SilentlyContinue | Select-Object -First 1
+if (-not $specCandidates) {
+    Write-Host "No .spec file found under packaging/ -- skipping Windows EXE build"
+    Exit 0
+}
+$specPath = $specCandidates.FullName
+
 if (!(Test-Path $PythonExe)) {
     # fallback to system python if venv not present
     $cmd = Get-Command python -ErrorAction SilentlyContinue
@@ -29,8 +37,8 @@ if ($LASTEXITCODE -ne 0) {
     throw "Failed to install pyinstaller"
 }
 
-Write-Host "Building executable with PyInstaller..."
-& $PythonExe -m PyInstaller --noconfirm --clean ".\\packaging\\tradedesk.spec"
+Write-Host "Building executable with PyInstaller using spec: $specPath"
+& $PythonExe -m PyInstaller --noconfirm --clean "$specPath"
 if ($LASTEXITCODE -ne 0) {
     throw "PyInstaller build failed"
 }
