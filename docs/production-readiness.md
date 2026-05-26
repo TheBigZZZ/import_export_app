@@ -1,60 +1,80 @@
-Production Readiness Checklist and Steps
+# Production Readiness Checklist and Steps
 
 This document lists the minimum steps to prepare TradeDesk for production, how to manage secrets, migrations, monitoring, packaging, and signing.
 
-1) Environment variables (minimum)
-  - TRADEDESK_ENVIRONMENT=production
-  - TRADEDESK_JWT_SECRET_KEY="<strong-random-secret>"
-  - TRADEDESK_ASYNC_DATABASE_URL optional (defaults to sqlite file in data dir). For production consider Postgres.
-  - TRADEDESK_SENTRY_DSN optional (if using Sentry)
+## Environment Variables
 
-2) Migration / DB initialization
-  2) Migration / DB initialization
-    - DIAGNOSTICS_UPLOAD_MAX_BYTES=5242880  (5MB default)
-    - DIAGNOSTICS_RETENTION_DAYS=30
-  - Do NOT rely on `Base.metadata.create_all` in production. Run migrations explicitly:
+Set these minimum values for production:
 
-    Python (programmatic):
-    ```bash
-    python -m tradedesk.backend.cli --init-db
-    ```
+- `TRADEDESK_ENVIRONMENT=production`
+- `TRADEDESK_JWT_SECRET_KEY` set to a strong random secret
+- `TRADEDESK_ASYNC_DATABASE_URL` optional, defaults to the SQLite file in the data directory; for production consider Postgres
+- `TRADEDESK_SENTRY_DSN` optional, only if you are using Sentry
 
-    Or using Alembic directly:
-    ```bash
-    alembic -c tradedesk/backend/alembic.ini upgrade head
-    ```
-    - DIAGNOSTICS_ALLOW_SELF_REGISTER=false
-    - DIAGNOSTICS_ADMIN_KEY=  # optional admin key to register installs
+## Migration and Database Initialization
 
-3) Secrets management
-  - Store `TRADEDESK_JWT_SECRET_KEY` and any DB passwords in your OS secret store or in your CI/CD secrets (do NOT check into source or `.env`).
-  - Recommended: use a secrets manager (Azure KeyVault, AWS Secrets Manager, HashiCorp Vault). In CI add repository secrets `TRADEDESK_JWT_SECRET_KEY`, `SENTRY_DSN`, `CODESIGN_CERT` etc.
+Do not rely on `Base.metadata.create_all` in production. Run migrations explicitly:
 
-4) Monitoring & error reporting (minimal recommended setup)
-  - Enable Sentry by setting `TRADEDESK_SENTRY_DSN` in production environment or CI secrets. The backend will initialize Sentry automatically when the DSN is present.
-  - Sentry gives grouped stacktraces, release tracking and alerting with minimal setup.
-  - Alternatively: send structured JSON logs to a log collector (Loki/ELK/Cloud Logging).
+```bash
+python -m tradedesk.backend.cli --init-db
+```
 
-5) Logging
-  - The backend config now emits structured JSON logs when no external config is present. Ensure your log collection captures STDOUT/STDERR.
+Or use Alembic directly:
 
-6) Packaging & signing
-  - The repository contains an Inno Setup script and a PyInstaller spec. To avoid SmartScreen warnings, obtain a code-signing cert and sign the EXE and installer with `signtool`.
-  - CI: Add a `build-windows-exe` job and store code-sign artifacts as secrets. The current GitHub Actions workflow uploads the dist artifact.
+```bash
+alembic -c tradedesk/backend/alembic.ini upgrade head
+```
 
-7) CI and automated releases
-  - Add the following repository secrets for CI: `TRADEDESK_JWT_SECRET_KEY`, `SENTRY_DSN` (optional), `CODESIGN_CERT` (or instructions to fetch it during CI), `CODESIGN_CERT_PASS`.
+Recommended backup and retention settings:
 
-8) Operational runbook
-  - Backup DB file regularly (schedule daily backups to `TRADEDESK_BACKUP_DIR`).
-  - Create monitoring alerts for error rate spikes and availability checks hitting `/health`.
+- `DIAGNOSTICS_UPLOAD_MAX_BYTES=5242880` for the 5 MB default
+- `DIAGNOSTICS_RETENTION_DAYS=30`
+- `DIAGNOSTICS_ALLOW_SELF_REGISTER=false`
+- `DIAGNOSTICS_ADMIN_KEY` set if you need install registration
 
-9) Quick safety checklist before first production deploy
-  - Set environment to production and ensure `TRADEDESK_DEBUG=false`.
-  - Run migrations: `python -m tradedesk.backend.cli --init-db`.
-  - Verify `/health` returns `{"status":"ok"}`.
-  - Start the packaged installer and verify the app launches and backend is reachable.
+## Secrets Management
 
-If you'd like, I can now:
-  - Add Sentry initialization (already added in backend), and provide instructions to add `TRADEDESK_SENTRY_DSN` to CI.
-  - Create a sample GitHub Actions secret setup snippet and example commands for code-signing.
+- Store `TRADEDESK_JWT_SECRET_KEY` and database passwords in your OS secret store or in CI/CD secrets.
+- Do not check secrets into source control or `.env` files.
+- Consider a secrets manager such as Azure Key Vault, AWS Secrets Manager, or HashiCorp Vault.
+- In CI, add repository secrets only for the values you actually need.
+
+## Monitoring and Error Reporting
+
+- Enable Sentry by setting `TRADEDESK_SENTRY_DSN` in the production environment or CI secrets if you want Sentry.
+- Sentry provides grouped stack traces, release tracking, and alerting.
+- Alternatively, send structured JSON logs to a log collector such as Loki, ELK, or Cloud Logging.
+
+## Logging
+
+- The backend emits structured JSON logs when no external logging config is present.
+- Ensure your log collection captures STDOUT and STDERR.
+
+## Packaging and Signing
+
+- The repository contains an Inno Setup script and a PyInstaller spec.
+- To avoid SmartScreen warnings, obtain a code-signing certificate and sign the EXE and installer with `signtool`.
+- GitHub Actions can build the Windows EXE and upload the dist artifact.
+
+## CI and Automated Releases
+
+Add repository secrets only if your CI workflow needs them:
+
+- `TRADEDESK_JWT_SECRET_KEY`
+- `SENTRY_DSN` if you use Sentry
+- `CODESIGN_CERT` if you sign in CI
+- `CODESIGN_CERT_PASS` if your certificate requires a password
+
+## Operational Runbook
+
+- Back up the database file regularly, ideally daily, into `TRADEDESK_BACKUP_DIR`.
+- Create monitoring alerts for error spikes and availability checks on `/health`.
+
+## Quick Safety Checklist Before First Production Deploy
+
+- Set environment to production and ensure `TRADEDESK_DEBUG=false`.
+- Run migrations with `python -m tradedesk.backend.cli --init-db`.
+- Verify `/health` returns `{"status":"ok"}`.
+- Start the packaged installer and verify the app launches and the backend is reachable.
+
+If you'd like, I can also add a CI secret setup snippet and example code-signing commands.

@@ -7,13 +7,13 @@
 pip install pyinstaller
 ```
 
-2. Build single-file executable:
+1. Build single-file executable:
 
 ```powershell
 ./packaging/build_exe.ps1
 ```
 
-3. The produced exe will be in `dist\TradeDesk.exe` (on Windows). Run it to launch the bundled backend and frontend.
+1. The produced exe will be in `dist\TradeDesk.exe` (on Windows). Run it to launch the bundled backend and frontend.
 
 Notes:
 
@@ -60,13 +60,13 @@ dist/TradeDeskERP-Setup.exe
 ### Diagnostics and Installer
 
 - The installer now includes `.env.production.example` in the application folder so operators can edit runtime settings after install.
-- Ensure the following environment variables are set for diagnostics (recommended):
+- Set these diagnostics variables:
 
-   - `TRADEDESK_DIAGNOSTICS_ENABLED=true`
-   - `TRADEDESK_DIAGNOSTICS_ALLOW_SELF_REGISTER=false`
-   - `TRADEDESK_DIAGNOSTICS_ADMIN_KEY` (set to a strong secret for admin API/UI)
-   - `TRADEDESK_DIAGNOSTICS_UPLOAD_URL` (public URL for uploads)
-   - `TRADEDESK_DIAGNOSTICS_WEBHOOK_URL` (optional webhook for notifications)
-   - `TRADEDESK_DIAGNOSTICS_NOTIFY_VIA_EMAIL` and SMTP details if using email alerts
+  - `TRADEDESK_DIAGNOSTICS_ENABLED=true`
+  - `TRADEDESK_DIAGNOSTICS_ALLOW_SELF_REGISTER=false`
+  - `TRADEDESK_DIAGNOSTICS_ADMIN_KEY` (set to a strong secret for admin API/UI)
+  - `TRADEDESK_DIAGNOSTICS_UPLOAD_URL` (public URL for uploads)
+  - `TRADEDESK_DIAGNOSTICS_WEBHOOK_URL` (optional webhook for notifications)
+  - `TRADEDESK_DIAGNOSTICS_NOTIFY_VIA_EMAIL` and SMTP details if using email alerts
 
 The packaged desktop client will use `TRADEDESK_DIAGNOSTICS_UPLOAD_URL_LOCAL` if set, otherwise `TRADEDESK_DIAGNOSTICS_UPLOAD_URL`.
