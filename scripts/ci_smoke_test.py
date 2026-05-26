@@ -56,23 +56,44 @@ def main():
     ]
     proc = subprocess.Popen(uvicorn_cmd, stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True)
     try:
-        if not wait_for_health(60):
-            print('Health endpoint did not become ready')
-            # dump some logs to help CI debugging
+        # stream stdout/stderr in background so we can show live logs on failure
+        import threading
+
+        stdout_lines = []
+        stderr_lines = []
+
+        def _read_stream(stream, collector):
             try:
-                out, err = proc.communicate(timeout=2)
-                if out:
-                    print('--- uvicorn stdout ---')
-                    print(out)
-                if err:
-                    print('--- uvicorn stderr ---')
-                    print(err)
+                for line in iter(stream.readline, ''):
+                    if not line:
+                        break
+                    collector.append(line.rstrip('\n'))
             except Exception:
-                try:
-                    proc.kill()
-                except Exception:
-                    pass
-            proc.kill()
+                pass
+
+        t_out = threading.Thread(target=_read_stream, args=(proc.stdout, stdout_lines), daemon=True)
+        t_err = threading.Thread(target=_read_stream, args=(proc.stderr, stderr_lines), daemon=True)
+        t_out.start()
+        t_err.start()
+
+        if not wait_for_health(90):
+            print('Health endpoint did not become ready')
+            # if process exited, show exit code
+            if proc.poll() is not None:
+                print('uvicorn exited with code', proc.returncode)
+            # dump collected logs (tail last 400 lines)
+            if stdout_lines:
+                print('--- uvicorn stdout (tail) ---')
+                for ln in stdout_lines[-400:]:
+                    print(ln)
+            if stderr_lines:
+                print('--- uvicorn stderr (tail) ---')
+                for ln in stderr_lines[-400:]:
+                    print(ln)
+            try:
+                proc.kill()
+            except Exception:
+                pass
             sys.exit(2)
         print('Health OK')
 
