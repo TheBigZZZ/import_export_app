@@ -99,10 +99,30 @@ def main():
 
         admin_user = os.environ.get('TRADEDESK_TEST_ADMIN_USER')
         admin_pass = os.environ.get('TRADEDESK_TEST_ADMIN_PASS')
+        # If CI credentials are not provided, attempt to create a temporary admin via the CLI
         if not admin_user or not admin_pass:
-            print('Set TRADEDESK_TEST_ADMIN_USER and TRADEDESK_TEST_ADMIN_PASS in the environment for CI smoke tests')
-            proc.kill()
-            sys.exit(2)
+            admin_user = f'ci_admin_{run_id}'
+            admin_pass = uuid.uuid4().hex[:12]
+            print('No TRADEDESK_TEST_ADMIN_* env vars set; attempting to create temporary admin via CLI')
+            # Try to create initial admin in DB using the project's CLI
+            try:
+                res = subprocess.run([
+                    sys.executable,
+                    '-m',
+                    'tradedesk.backend.cli',
+                    '--init-admin',
+                    '--admin-username',
+                    admin_user,
+                    '--admin-password',
+                    admin_pass,
+                    '--force',
+                ], capture_output=True, text=True)
+                print('CLI create-admin stdout:')
+                print(res.stdout)
+                if res.returncode != 0:
+                    print('CLI create-admin failed or users exist; continuing and attempting login anyway')
+            except Exception as exc:
+                print('Failed to invoke CLI to create admin:', exc)
 
         status, body = http_json('POST', f'{BASE}/api/auth/login', {'username': admin_user, 'password': admin_pass})
         if status == 401:
