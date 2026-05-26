@@ -1,6 +1,5 @@
 from __future__ import annotations
 
-import multiprocessing
 import os
 import subprocess
 import sys
@@ -25,17 +24,8 @@ BACKEND_STARTUP_POLL_INTERVAL_SECONDS = 0.5
 
 
 def _run_backend_server() -> None:
-    import uvicorn
-
-    # In frozen bundles, importing by a module path string can fail because
-    # the package is bundled inside the executable. Import the app object
-    # directly to ensure uvicorn has a reference to the ASGI app.
-    try:
-        from tradedesk.backend.main import app as backend_app
-    except Exception:
-        # Fall back to string import if direct import fails for any reason
-        backend_app = "tradedesk.backend.main:app"
     import tempfile
+
     tmp = Path(tempfile.gettempdir()) / "tradedesk-backend-error.txt"
     try:
         if tmp.exists():
@@ -43,44 +33,42 @@ def _run_backend_server() -> None:
     except Exception:
         pass
 
+    # Launch the backend as a separate process via the frozen executable's
+    # dedicated backend mode. This is more reliable than multiprocessing spawn
+    # on Windows CI runners.
+    backend_cmd = [
+        sys.executable,
+        "--backend-cli",
+        "--serve",
+    ]
+    log_path = Path(tempfile.gettempdir()) / "tradedesk-backend.log"
+    log_file = open(log_path, "a", encoding="utf-8")
     try:
-        uvicorn.run(
-            backend_app,
-            host="127.0.0.1",
-            port=BACKEND_PORT,
-            log_level="warning",
-            access_log=False,
-            log_config=None,
+        proc = subprocess.Popen(
+            backend_cmd,
+            stdout=log_file,
+            stderr=subprocess.STDOUT,
+            cwd=str(Path(sys.executable).parent),
         )
-    except Exception as exc:  # pragma: no cover - runtime diagnostic for frozen builds
-        import traceback
-        import tempfile
-
-        tb = traceback.format_exc()
-        try:
-            tmp = Path(tempfile.gettempdir()) / "tradedesk-backend-error.txt"
-            tmp.write_text(tb, encoding="utf-8")
-        except Exception:
-            pass
-        raise
-
-
-def start_backend(project_root: Path) -> Any:
-    if getattr(sys, "frozen", False):
-        proc = multiprocessing.Process(target=_run_backend_server, daemon=True)
-        proc.start()
-
         for _ in range(int(BACKEND_STARTUP_TIMEOUT_SECONDS / BACKEND_STARTUP_POLL_INTERVAL_SECONDS)):
             try:
                 httpx.get(f"http://127.0.0.1:{BACKEND_PORT}/health", timeout=1.0)
                 return proc
             except Exception:
-                if proc.exitcode is not None:
-                    raise RuntimeError(f"Backend exited early with code {proc.exitcode}")
+                if proc.poll() is not None:
+                    raise RuntimeError(f"Backend exited early with code {proc.returncode}; see {log_path}")
                 time.sleep(BACKEND_STARTUP_POLL_INTERVAL_SECONDS)
+        raise RuntimeError(f"Backend failed to start; see {log_path}")
+    finally:
+        try:
+            log_file.close()
+        except Exception:
+            pass
 
-        proc.terminate()
-        raise RuntimeError("Backend failed to start")
+
+def start_backend(project_root: Path) -> Any:
+    if getattr(sys, "frozen", False):
+        return _run_backend_server()
 
     env = dict(**os.environ)
     env["PYTHONPATH"] = str(project_root)

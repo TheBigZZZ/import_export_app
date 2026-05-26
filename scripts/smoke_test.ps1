@@ -59,6 +59,18 @@ function ExitWithFailure($msg) {
     Exit 1
 }
 
+function Show-BackendLogs {
+    param($ErrorFile, $LogFile)
+    if ($ErrorFile -and (Test-Path $ErrorFile)) {
+        Write-Host "Backend error file:"
+        Get-Content $ErrorFile -Tail 200
+    }
+    if ($LogFile -and (Test-Path $LogFile)) {
+        Write-Host "Backend log file:"
+        Get-Content $LogFile -Tail 200
+    }
+}
+
 Write-Host "Starting TradeDesk smoke test..."
 
 if ($ExePath -and (Test-Path $ExePath)) {
@@ -73,16 +85,17 @@ if ($ExePath -and (Test-Path $ExePath)) {
 }
 
 $runId = (Get-Date).ToString('yyyyMMddHHmmss')
+$err = Join-Path $env:TEMP 'tradedesk-backend-error.txt'
+$backendLog = Join-Path $env:TEMP 'tradedesk-backend.log'
 
 Write-Host "Launching EXE: $exePath"
 $proc = Start-Process -FilePath $exePath -PassThru
 Start-Sleep -Milliseconds 800
 
 Write-Host "Waiting for health endpoint $HealthUrl ($Timeout s) ..."
-$err = Join-Path $env:TEMP 'tradedesk-backend-error.txt'
 if (-Not (Wait-ForHealth -Url $HealthUrl -TimeoutSec $Timeout -Proc $proc -ErrorFile $err)) {
     # try to show backend temp error if present
-    if (Test-Path $err) { Write-Host "Backend error file:"; Get-Content $err -Tail 200 }
+    Show-BackendLogs -ErrorFile $err -LogFile $backendLog
     $proc | Stop-Process -Force -ErrorAction SilentlyContinue
     ExitWithFailure "Health endpoint did not respond in time."
 }

@@ -3,6 +3,8 @@ from __future__ import annotations
 import argparse
 import sqlite3
 import sys
+import tempfile
+import traceback
 from pathlib import Path
 
 from .config import settings
@@ -111,6 +113,7 @@ def reset_db_cmd(force: bool = False) -> int:
 
 def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(prog="tradedesk.backend.cli")
+    parser.add_argument("--serve", action="store_true", help="Run the backend API server")
     parser.add_argument("--init-db", action="store_true", help="Apply Alembic migrations (upgrade head)")
     parser.add_argument("--backup-db", nargs="?", const="", help="Create a DB backup. Optionally pass a destination directory.")
     parser.add_argument("--restore-db", help="Restore DB from a backup file")
@@ -131,6 +134,8 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument("--target-username", help="Username to reset password for")
 
     args = parser.parse_args(argv)
+    if args.serve:
+        return serve_cmd()
     if args.init_db:
         return init_db()
     if args.reset_db:
@@ -238,6 +243,44 @@ def reset_admin_password_cmd(username: str, new_password: str) -> int:
     finally:
         conn.close()
     print(f"Password for '{username}' has been reset.")
+    return 0
+
+
+def serve_cmd() -> int:
+    error_path = Path(tempfile.gettempdir()) / "tradedesk-backend-error.txt"
+    try:
+        if error_path.exists():
+            error_path.unlink()
+    except Exception:
+        pass
+
+    try:
+        import uvicorn
+        from .main import app
+    except Exception as exc:
+        try:
+            error_path.write_text(traceback.format_exc(), encoding="utf-8")
+        except Exception:
+            pass
+        print("Failed to import backend app:", exc, file=sys.stderr)
+        return 1
+
+    try:
+        uvicorn.run(
+            app,
+            host="127.0.0.1",
+            port=settings.api_port,
+            log_level="warning",
+            access_log=False,
+            log_config=None,
+        )
+    except Exception:
+        try:
+            error_path.write_text(traceback.format_exc(), encoding="utf-8")
+        except Exception:
+            pass
+        raise
+
     return 0
 
 

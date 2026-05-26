@@ -3,30 +3,21 @@ from __future__ import annotations
 import multiprocessing
 import sys
 
-from frontend.main import main
-
 
 def run() -> int:
-    # When running as a frozen executable (PyInstaller) ensure stdio
-    # streams exist and multiprocessing is using a compatible start method.
-    if getattr(sys, "frozen", False):
-        # Some frozen environments may have stdout/stderr set to None;
-        # ensure they are at least connected to devnull to avoid errors
-        # when multiprocessing.spawn tries to write to the parent pipe.
-        import os
-
-        if sys.stdout is None:
-            sys.stdout = open(os.devnull, "w")
-        if sys.stderr is None:
-            sys.stderr = open(os.devnull, "w")
-
-        try:
-            multiprocessing.set_start_method("spawn", force=True)
-        except RuntimeError:
-            # start method already set; ignore
-            pass
-
     multiprocessing.freeze_support()
+
+    # Allow the frozen executable to act as a backend worker when launched by
+    # the GUI host. This avoids multiprocessing spawn edge cases in packaged
+    # Windows runners and gives us a dedicated, logged backend process.
+    if "--backend-cli" in sys.argv:
+        from tradedesk.backend.cli import main as backend_cli_main
+
+        args = [arg for arg in sys.argv[1:] if arg != "--backend-cli"]
+        return backend_cli_main(args)
+
+    from frontend.main import main
+
     return main()
 
 

@@ -180,6 +180,8 @@ jobs:
           # copy any CI temp backend error file
           $err = Join-Path $env:TEMP 'tradedesk-backend-error.txt'
           if (Test-Path $err) { Copy-Item -Path $err -Destination $out -Force }
+          $backendLog = Join-Path $env:TEMP 'tradedesk-backend.log'
+          if (Test-Path $backendLog) { Copy-Item -Path $backendLog -Destination $out -Force }
           # copy user TradeDesk logs if present
           $userTD = Join-Path $env:USERPROFILE 'TradeDesk'
           if (Test-Path $userTD) { Copy-Item -Path (Join-Path $userTD 'logs') -Destination $out -Recurse -Force -ErrorAction SilentlyContinue }
