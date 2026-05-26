@@ -20,6 +20,8 @@ except ImportError:
     from frontend.mainwindow import MainWindow
 
 BACKEND_PORT = 8742
+BACKEND_STARTUP_TIMEOUT_SECONDS = 90
+BACKEND_STARTUP_POLL_INTERVAL_SECONDS = 0.5
 
 
 def _run_backend_server() -> None:
@@ -68,12 +70,14 @@ def start_backend(project_root: Path) -> Any:
         proc = multiprocessing.Process(target=_run_backend_server, daemon=True)
         proc.start()
 
-        for _ in range(30):
+        for _ in range(int(BACKEND_STARTUP_TIMEOUT_SECONDS / BACKEND_STARTUP_POLL_INTERVAL_SECONDS)):
             try:
                 httpx.get(f"http://127.0.0.1:{BACKEND_PORT}/health", timeout=1.0)
                 return proc
             except Exception:
-                time.sleep(0.4)
+                if proc.exitcode is not None:
+                    raise RuntimeError(f"Backend exited early with code {proc.exitcode}")
+                time.sleep(BACKEND_STARTUP_POLL_INTERVAL_SECONDS)
 
         proc.terminate()
         raise RuntimeError("Backend failed to start")
@@ -99,12 +103,14 @@ def start_backend(project_root: Path) -> Any:
         stderr=subprocess.DEVNULL,
     )
 
-    for _ in range(30):
+    for _ in range(int(BACKEND_STARTUP_TIMEOUT_SECONDS / BACKEND_STARTUP_POLL_INTERVAL_SECONDS)):
         try:
             httpx.get(f"http://127.0.0.1:{BACKEND_PORT}/health", timeout=1.0)
             return proc
         except Exception:
-            time.sleep(0.4)
+            if proc.poll() is not None:
+                raise RuntimeError(f"Backend exited early with code {proc.returncode}")
+            time.sleep(BACKEND_STARTUP_POLL_INTERVAL_SECONDS)
 
     proc.terminate()
     raise RuntimeError("Backend failed to start")

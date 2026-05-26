@@ -28,9 +28,22 @@ Set-StrictMode -Version Latest
 $ErrorActionPreference = 'Stop'
 
 function Wait-ForHealth {
-    param($Url, $TimeoutSec = 60)
+    param($Url, $TimeoutSec = 60, $Proc = $null, $ErrorFile = $null)
     $start = Get-Date
     while ((Get-Date) -lt $start.AddSeconds($TimeoutSec)) {
+        if ($Proc -and -not $Proc.HasExited) {
+            try {
+                $null = $Proc.Refresh()
+            } catch {
+            }
+        }
+        if ($Proc -and $Proc.HasExited) {
+            if ($ErrorFile -and (Test-Path $ErrorFile)) {
+                Write-Host "Backend error file:"
+                Get-Content $ErrorFile -Tail 200
+            }
+            return $false
+        }
         try {
             $res = Invoke-RestMethod -Uri $Url -TimeoutSec 5
             if ($res -and $res.status -eq 'ok') { return $true }
@@ -66,9 +79,9 @@ $proc = Start-Process -FilePath $exePath -PassThru
 Start-Sleep -Milliseconds 800
 
 Write-Host "Waiting for health endpoint $HealthUrl ($Timeout s) ..."
-if (-Not (Wait-ForHealth -Url $HealthUrl -TimeoutSec $Timeout)) {
+$err = Join-Path $env:TEMP 'tradedesk-backend-error.txt'
+if (-Not (Wait-ForHealth -Url $HealthUrl -TimeoutSec $Timeout -Proc $proc -ErrorFile $err)) {
     # try to show backend temp error if present
-    $err = Join-Path $env:TEMP 'tradedesk-backend-error.txt'
     if (Test-Path $err) { Write-Host "Backend error file:"; Get-Content $err -Tail 200 }
     $proc | Stop-Process -Force -ErrorAction SilentlyContinue
     ExitWithFailure "Health endpoint did not respond in time."
