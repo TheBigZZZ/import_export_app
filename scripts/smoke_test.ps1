@@ -18,6 +18,12 @@ Note: script assumes the app uses default settings paths (%USERPROFILE%/TradeDes
 that the virtualenv is at .\.venv with python available at .\.venv\Scripts\python
 #>
 
+param(
+    [string]$ExePath = '',
+    [string]$HealthUrl = 'http://127.0.0.1:8742/health',
+    [int]$Timeout = 60
+)
+
 Set-StrictMode -Version Latest
 $ErrorActionPreference = 'Stop'
 
@@ -42,11 +48,15 @@ function ExitWithFailure($msg) {
 
 Write-Host "Starting TradeDesk smoke test..."
 
-$exePath = Join-Path (Get-Location) 'dist\TradeDeskERP\TradeDeskERP.exe'
-if (-Not (Test-Path $exePath)) {
-    # try to find any exe under dist if layout differs
-    $candidates = Get-ChildItem -Path (Join-Path (Get-Location) 'dist') -Recurse -Filter *.exe -ErrorAction SilentlyContinue | Select-Object -First 1
-    if ($candidates) { $exePath = $candidates.FullName } else { ExitWithFailure "Executable not found at expected path and no .exe in dist: $exePath" }
+if ($ExePath -and (Test-Path $ExePath)) {
+    $exePath = $ExePath
+} else {
+    $exePath = Join-Path (Get-Location) 'dist\TradeDeskERP\TradeDeskERP.exe'
+    if (-Not (Test-Path $exePath)) {
+        # try to find any exe under dist if layout differs
+        $candidates = Get-ChildItem -Path (Join-Path (Get-Location) 'dist') -Recurse -Filter *.exe -ErrorAction SilentlyContinue | Select-Object -First 1
+        if ($candidates) { $exePath = $candidates.FullName } else { ExitWithFailure "Executable not found at expected path and no .exe in dist: $exePath" }
+    }
 }
 
 $runId = (Get-Date).ToString('yyyyMMddHHmmss')
@@ -55,9 +65,8 @@ Write-Host "Launching EXE: $exePath"
 $proc = Start-Process -FilePath $exePath -PassThru
 Start-Sleep -Milliseconds 800
 
-$healthUrl = 'http://127.0.0.1:8742/health'
-Write-Host "Waiting for health endpoint $healthUrl (60s) ..."
-if (-Not (Wait-ForHealth -Url $healthUrl -TimeoutSec 60)) {
+Write-Host "Waiting for health endpoint $HealthUrl ($Timeout s) ..."
+if (-Not (Wait-ForHealth -Url $HealthUrl -TimeoutSec $Timeout)) {
     # try to show backend temp error if present
     $err = Join-Path $env:TEMP 'tradedesk-backend-error.txt'
     if (Test-Path $err) { Write-Host "Backend error file:"; Get-Content $err -Tail 200 }
@@ -67,7 +76,7 @@ if (-Not (Wait-ForHealth -Url $healthUrl -TimeoutSec 60)) {
 Write-Host "Health OK"
 
 # Login - credentials must be provided via environment variables for security
-$loginUrl = 'http://127.0.0.1:8742/api/auth/login'
+$loginUrl = "$HealthUrl" -replace '/health$','/api/auth/login'
 $adminUser = $env:TRADEDESK_TEST_ADMIN_USER
 $adminPass = $env:TRADEDESK_TEST_ADMIN_PASS
 if (-not $adminUser -or -not $adminPass) {
