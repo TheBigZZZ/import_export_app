@@ -22,17 +22,29 @@ jobs:
         run: |
           python -m pip install --upgrade pip
           python -m pip install -r packaging/requirements-pinned.txt
-      - name: Install package in editable mode
+      - name: Inspect workspace layout
         run: |
-          python -m pip install -e .
-      - name: Show installed package info
+          echo "Workspace: $GITHUB_WORKSPACE"
+          echo "Listing top-level files:"; ls -la
+          echo "Searching for 'tradedesk' package directory..."
+          find . -maxdepth 4 -type d -name tradedesk -print || true
+      - name: Locate package root and install editable
+        id: locate_install
         run: |
-          python -m pip show tradedesk || true
-          python -c "import sys; print('sys.path preview:', sys.path[:5])"
-          python -c "import importlib, pkgutil; print('packages available:', [m.name for m in pkgutil.iter_modules()][:20])"
+          pkg_dir=$(dirname "$(find . -maxdepth 4 -type d -name tradedesk -print | head -n1)") || true
+          if [ -z "$pkg_dir" ]; then
+            echo "No tradedesk package found via find; defaulting to current dir"
+            pkg_dir=.
+          fi
+          echo "PACKAGE_DIR=$pkg_dir" >> $GITHUB_ENV
+          echo "Installing package from $pkg_dir"
+          python -m pip install -e "$pkg_dir"
+          echo "Installed packages:"; python -m pip show tradedesk || true
       - name: Run tests
         run: |
-          PYTHONPATH=${{ github.workspace }} python -m pytest -q
+          # include both workspace root and package dir on PYTHONPATH
+          echo "Using PACKAGE_DIR=$PACKAGE_DIR"
+          PYTHONPATH="${{ github.workspace }}:${{ github.workspace }}/${PACKAGE_DIR}" python -m pytest -q
 
   generate-sbom:
     name: Generate SBOM
