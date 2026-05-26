@@ -1,0 +1,26 @@
+name: Scheduled Backup
+
+on:
+  schedule:
+    - cron: '0 3 * * *' # daily at 03:00 UTC
+
+jobs:
+  backup:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Set up Python
+        uses: actions/setup-python@v4
+        with:
+          python-version: '3.13'
+      - name: Install deps
+        run: python -m pip install --upgrade pip
+      - name: Run backup
+        run: |
+          mkdir -p data || true
+          python -m tradedesk.backend.cli --backup-db data/backups || true
+      - name: Upload backups
+        uses: actions/upload-artifact@v4
+        with:
+          name: daily-backups
+          path: data/backups/**
