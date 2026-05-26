@@ -37,6 +37,26 @@ if ($LASTEXITCODE -ne 0) {
     throw "Failed to install pyinstaller"
 }
 
+# Normalize and install the app's pinned runtime requirements so PyInstaller
+# can collect all backend modules (including pydantic-based schemas).
+$normalizeScript = Join-Path (Get-Location) 'packaging\normalize_requirements.py'
+if (Test-Path $normalizeScript) {
+    Write-Host "Normalizing pinned requirements encoding..."
+    & $PythonExe $normalizeScript
+    if ($LASTEXITCODE -ne 0) {
+        throw "Failed to normalize requirements encoding"
+    }
+}
+
+$requirementsPath = Join-Path (Get-Location) 'packaging\requirements-pinned.txt'
+if (Test-Path $requirementsPath) {
+    Write-Host "Installing pinned runtime requirements..."
+    & $PythonExe -m pip install -r $requirementsPath
+    if ($LASTEXITCODE -ne 0) {
+        throw "Failed to install pinned runtime requirements"
+    }
+}
+
 Write-Host "Building executable with PyInstaller using spec: $specPath"
 & $PythonExe -m PyInstaller --noconfirm --clean "$specPath"
 if ($LASTEXITCODE -ne 0) {
