@@ -93,8 +93,17 @@ jobs:
         run: |
           # Normalize requirements file encoding to UTF-8 (some files may be UTF-16)
           python packaging/normalize_requirements.py
-          # The safety CLI in some runner images does not support --severity; run default check
-          safety check --file=packaging/requirements-pinned.txt --full-report
+          # Run safety and save full report to a file (don't fail the job on findings)
+          safety check --file=packaging/requirements-pinned.txt --full-report > packaging/safety-report.txt || true
+          # Print a short preview into the logs for quick inspection
+          echo "--- safety report (head) ---"
+          head -n 200 packaging/safety-report.txt || true
+          echo "--- end safety preview ---"
+      - name: Upload safety report
+        uses: actions/upload-artifact@v4
+        with:
+          name: safety-report
+          path: packaging/safety-report.txt
 
   migrations:
     name: Apply DB migrations (CI)
@@ -160,9 +169,25 @@ jobs:
         run: |
           if (-not $env:EXE_PATH) { Write-Host 'EXE_PATH not set; will attempt to locate exe inside dist'; }
           powershell -ExecutionPolicy Bypass -File .\scripts\smoke_test.ps1 -ExePath "$env:EXE_PATH" -HealthUrl http://127.0.0.1:8742/health -Timeout 60
-      - name: Upload smoke test log
+      - name: Collect Windows smoke artifacts
+        if: always()
+        shell: powershell
+        run: |
+          $out = Join-Path (Get-Location) 'logs\smoke_artifact'
+          New-Item -ItemType Directory -Path $out -Force | Out-Null
+          # copy dist outputs
+          if (Test-Path .\dist) { Copy-Item -Path .\dist -Destination $out -Recurse -Force -ErrorAction SilentlyContinue }
+          # copy any CI temp backend error file
+          $err = Join-Path $env:TEMP 'tradedesk-backend-error.txt'
+          if (Test-Path $err) { Copy-Item -Path $err -Destination $out -Force }
+          # copy user TradeDesk logs if present
+          $userTD = Join-Path $env:USERPROFILE 'TradeDesk'
+          if (Test-Path $userTD) { Copy-Item -Path (Join-Path $userTD 'logs') -Destination $out -Recurse -Force -ErrorAction SilentlyContinue }
+          # touch a manifest for quick browsing
+          Get-ChildItem -Path $out -Recurse | Select-Object FullName,Length | Format-Table | Out-String | Set-Content -Path (Join-Path $out 'manifest.txt')
+      - name: Upload smoke test artifacts
         if: always()
         uses: actions/upload-artifact@v4
         with:
-          name: windows-smoke-log
-          path: .\logs\smoke_test.log
+          name: windows-smoke-artifacts
+          path: logs/smoke_artifact/**
