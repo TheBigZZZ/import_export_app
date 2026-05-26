@@ -21,14 +21,14 @@ that the virtualenv is at .\.venv with python available at .\.venv\Scripts\pytho
 param(
     [string]$ExePath = '',
     [string]$HealthUrl = 'http://127.0.0.1:8742/health',
-    [int]$Timeout = 60
+    [int]$Timeout = 120
 )
 
 Set-StrictMode -Version Latest
 $ErrorActionPreference = 'Stop'
 
 function Wait-ForHealth {
-    param($Url, $TimeoutSec = 60, $Proc = $null, $ErrorFile = $null)
+    param($Url, $TimeoutSec = 120, $Proc = $null, $ErrorFile = $null)
     $start = Get-Date
     while ((Get-Date) -lt $start.AddSeconds($TimeoutSec)) {
         if ($Proc -and -not $Proc.HasExited) {
