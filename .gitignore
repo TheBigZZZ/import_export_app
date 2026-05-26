@@ -4,6 +4,11 @@ __pycache__/
 .venv/
 .env
 TradeDesk/
+!tradedesk/
+!tradedesk/**
+tradedesk/**/__pycache__/
+tradedesk/**/*.pyc
+tradedesk/**/*.pyo
 backups/
 logs/
 data/
