@@ -1,4 +1,4 @@
-Release checklist
+# Release checklist
 
 - [ ] Bump version and tag (e.g., `v1.0.0`)
 - [ ] Run local build and smoke test: `./packaging/build_exe.ps1` and run `dist\launcher.exe`

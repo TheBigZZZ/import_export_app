@@ -28,23 +28,33 @@ jobs:
           echo "Listing top-level files:"; ls -la
           echo "Searching for 'tradedesk' package directory..."
           find . -maxdepth 4 -type d -name tradedesk -print || true
-      - name: Locate package root and install editable
+      - name: Locate package root
         id: locate_install
         run: |
-          pkg_dir=$(dirname "$(find . -maxdepth 4 -type d -name tradedesk -print | head -n1)") || true
+          pkg_dir=$(find . -maxdepth 4 -type d -name tradedesk -print | head -n1) || true
           if [ -z "$pkg_dir" ]; then
             echo "No tradedesk package found via find; defaulting to current dir"
             pkg_dir=.
           fi
-          echo "PACKAGE_DIR=$pkg_dir" >> $GITHUB_ENV
-          echo "Installing package from $pkg_dir"
-          python -m pip install -e "$pkg_dir"
-          echo "Installed packages:"; python -m pip show tradedesk || true
+          # package dir should be the parent directory that contains tradedesk
+          pkg_root=$(dirname "$pkg_dir")
+          echo "PACKAGE_DIR=$pkg_root" >> $GITHUB_ENV
+          echo "Found package root: $pkg_root"
+
+      - name: Build wheel
+        run: |
+          python -m pip install --upgrade pip build
+          python -m build --wheel --outdir dist "$PACKAGE_DIR"
+
+      - name: Install wheel and verify
+        run: |
+          python -m pip install dist/*.whl
+          python -m pip show tradedesk
+          python -c "import tradedesk; print('tradedesk imported from', tradedesk.__file__)"
+
       - name: Run tests
         run: |
-          # include both workspace root and package dir on PYTHONPATH
-          echo "Using PACKAGE_DIR=$PACKAGE_DIR"
-          PYTHONPATH="${{ github.workspace }}:${{ github.workspace }}/${PACKAGE_DIR}" python -m pytest -q
+          python -m pytest -q
 
   generate-sbom:
     name: Generate SBOM
