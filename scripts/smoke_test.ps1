@@ -87,6 +87,12 @@ if ($ExePath -and (Test-Path $ExePath)) {
 $runId = (Get-Date).ToString('yyyyMMddHHmmss')
 $err = Join-Path $env:TEMP 'tradedesk-backend-error.txt'
 $backendLog = Join-Path $env:TEMP 'tradedesk-backend.log'
+$pythonExe = Join-Path (Get-Location) '.venv\Scripts\python.exe'
+if (-Not (Test-Path $pythonExe)) { $pythonExe = Join-Path (Get-Location) '.venv\Scripts\python' }
+if (-Not (Test-Path $pythonExe)) {
+    $sysPy = (Get-Command python -ErrorAction SilentlyContinue).Path
+    if ($sysPy) { $pythonExe = $sysPy } else { $pythonExe = 'py -3' }
+}
 
 Write-Host "Launching EXE: $exePath"
 $proc = Start-Process -FilePath $exePath -PassThru
@@ -106,8 +112,16 @@ $loginUrl = "$HealthUrl" -replace '/health$','/api/auth/login'
 $adminUser = $env:TRADEDESK_TEST_ADMIN_USER
 $adminPass = $env:TRADEDESK_TEST_ADMIN_PASS
 if (-not $adminUser -or -not $adminPass) {
-    $proc | Stop-Process -Force -ErrorAction SilentlyContinue
-    ExitWithFailure "Set TRADEDESK_TEST_ADMIN_USER and TRADEDESK_TEST_ADMIN_PASS environment variables before running this script."
+    $adminUser = "ci_admin_$runId"
+    $adminPass = [guid]::NewGuid().ToString('N').Substring(0, 16)
+    Write-Host "No TRADEDESK_TEST_ADMIN_* env vars set; creating temporary admin $adminUser"
+    $createAdminOutput = & $pythonExe -m tradedesk.backend.cli --init-admin --admin-username $adminUser --admin-password $adminPass --admin-full-name "CI Admin" --admin-role super_admin --force 2>&1
+    Write-Host $createAdminOutput
+    if ($LASTEXITCODE -ne 0) {
+        Show-BackendLogs -ErrorFile $err -LogFile $backendLog
+        $proc | Stop-Process -Force -ErrorAction SilentlyContinue
+        ExitWithFailure "Failed to create temporary admin via CLI"
+    }
 }
 $creds = @{ username = $adminUser; password = $adminPass } | ConvertTo-Json
 Write-Host "Logging in as test admin user: $adminUser"
@@ -220,13 +234,6 @@ Write-Host "Voucher posted"
 $backupDir = Join-Path (Get-Location) 'test_backups'
 New-Item -ItemType Directory -Path $backupDir -Force | Out-Null
 Write-Host "Creating backup via CLI..."
-# Prefer venv python, but fall back to system python if absent on CI runners
-$pythonExe = Join-Path (Get-Location) '.venv\Scripts\python.exe'
-if (-Not (Test-Path $pythonExe)) { $pythonExe = Join-Path (Get-Location) '.venv\Scripts\python' }
-if (-Not (Test-Path $pythonExe)) {
-    $sysPy = (Get-Command python -ErrorAction SilentlyContinue).Path
-    if ($sysPy) { $pythonExe = $sysPy } else { $pythonExe = 'py -3' }
-}
 
 Write-Host "Calling: $pythonExe -m tradedesk.backend.cli --backup-db $backupDir"
 $backupOutput = & $pythonExe -m tradedesk.backend.cli --backup-db $backupDir 2>&1
