@@ -6,7 +6,21 @@ param(
 $ErrorActionPreference = "Stop"
 
 if (!(Test-Path $PythonExe)) {
-    throw "Python executable not found: $PythonExe"
+    # fallback to system python if venv not present
+    $cmd = Get-Command python -ErrorAction SilentlyContinue
+    if ($cmd) {
+        $PythonExe = $cmd.Path
+        Write-Host "Using system python: $PythonExe"
+    } else {
+        # try the py launcher
+        $pyCmd = "py -3"
+        try {
+            $pyPath = (Get-Command py -ErrorAction SilentlyContinue).Path
+            if ($pyPath) { $PythonExe = "py -3"; Write-Host "Using py launcher: $PythonExe" }
+        } catch {
+            throw "Python executable not found: $PythonExe"
+        }
+    }
 }
 
 Write-Host "Installing packaging dependency..."

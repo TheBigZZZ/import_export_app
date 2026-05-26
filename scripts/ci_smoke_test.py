@@ -54,10 +54,24 @@ def main():
         '8742',
         '--no-access-log',
     ]
-    proc = subprocess.Popen(uvicorn_cmd, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
+    proc = subprocess.Popen(uvicorn_cmd, stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True)
     try:
         if not wait_for_health(60):
             print('Health endpoint did not become ready')
+            # dump some logs to help CI debugging
+            try:
+                out, err = proc.communicate(timeout=2)
+                if out:
+                    print('--- uvicorn stdout ---')
+                    print(out)
+                if err:
+                    print('--- uvicorn stderr ---')
+                    print(err)
+            except Exception:
+                try:
+                    proc.kill()
+                except Exception:
+                    pass
             proc.kill()
             sys.exit(2)
         print('Health OK')
@@ -174,7 +188,10 @@ def main():
 
         print('CI smoke test PASSED')
     finally:
-        proc.kill()
+            try:
+                proc.kill()
+            except Exception:
+                pass
 
 
 if __name__ == '__main__':

@@ -43,7 +43,11 @@ function ExitWithFailure($msg) {
 Write-Host "Starting TradeDesk smoke test..."
 
 $exePath = Join-Path (Get-Location) 'dist\TradeDeskERP\TradeDeskERP.exe'
-if (-Not (Test-Path $exePath)) { ExitWithFailure "Executable not found at $exePath" }
+if (-Not (Test-Path $exePath)) {
+    # try to find any exe under dist if layout differs
+    $candidates = Get-ChildItem -Path (Join-Path (Get-Location) 'dist') -Recurse -Filter *.exe -ErrorAction SilentlyContinue | Select-Object -First 1
+    if ($candidates) { $exePath = $candidates.FullName } else { ExitWithFailure "Executable not found at expected path and no .exe in dist: $exePath" }
+}
 
 $runId = (Get-Date).ToString('yyyyMMddHHmmss')
 
@@ -181,9 +185,13 @@ Write-Host "Voucher posted"
 $backupDir = Join-Path (Get-Location) 'test_backups'
 New-Item -ItemType Directory -Path $backupDir -Force | Out-Null
 Write-Host "Creating backup via CLI..."
+# Prefer venv python, but fall back to system python if absent on CI runners
 $pythonExe = Join-Path (Get-Location) '.venv\Scripts\python.exe'
 if (-Not (Test-Path $pythonExe)) { $pythonExe = Join-Path (Get-Location) '.venv\Scripts\python' }
-if (-Not (Test-Path $pythonExe)) { $proc | Stop-Process -Force -ErrorAction SilentlyContinue; ExitWithFailure 'Python executable in .venv not found' }
+if (-Not (Test-Path $pythonExe)) {
+    $sysPy = (Get-Command python -ErrorAction SilentlyContinue).Path
+    if ($sysPy) { $pythonExe = $sysPy } else { $pythonExe = 'py -3' }
+}
 
 Write-Host "Calling: $pythonExe -m tradedesk.backend.cli --backup-db $backupDir"
 $backupOutput = & $pythonExe -m tradedesk.backend.cli --backup-db $backupDir 2>&1

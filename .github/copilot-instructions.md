@@ -34,6 +34,7 @@
 - Never use deprecated APIs or packages — always use latest stable versions
 - Add comments only on complex logic, nowhere else
 - Always design with perfection in mind.
+- If you are ever given an error message from the user. Always check any for common problems and mistakes that may be the reason for the error. Be sincere. Dont be afraid to ask. Dont always go around trying to find a fix. The fix may be just a small change, nothing too big and overcomplicated and has to be done multiple times desperately trying.
 
 ## Workflow
 - Always plan fully before writing any code

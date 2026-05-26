@@ -104,7 +104,10 @@ jobs:
         with:
           python-version: '3.13'
       - name: Install migration deps
-        run: python -m pip install alembic
+        run: |
+          python -m pip install --upgrade pip
+          # Install the pinned runtime deps so migrations can import project modules
+          python -m pip install -r packaging/requirements-pinned.txt
       - name: Ensure DB backup and run migrations
         run: |
           echo "Preparing database for migrations"
