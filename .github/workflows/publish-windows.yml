@@ -38,15 +38,15 @@ jobs:
           }
         shell: pwsh
 
-      - name: Build EXE (PyInstaller)
+      - name: Build EXE (PyInstaller using spec)
         run: |
-          .\packaging\build_exe.ps1
+          python -m PyInstaller --clean --noconfirm packaging/tradedesk.spec
         shell: pwsh
 
       - name: Smoke-test the EXE (health endpoint)
         shell: pwsh
         run: |
-          $exe = "dist\launcher.exe"
+          $exe = "dist\TradeDeskERP\TradeDeskERP.exe"
           if (-not (Test-Path $exe)) { Write-Host "EXE not found: $exe"; exit 1 }
           Write-Host "Starting EXE for smoke test..."
           $proc = Start-Process -FilePath $exe -PassThru
@@ -83,7 +83,7 @@ jobs:
         with:
           name: tradedesk-exe
           path: |
-            dist/launcher.exe
+            dist/TradeDeskERP/TradeDeskERP.exe
             dist/TradeDesk-Setup.exe
 
       - name: Create GitHub Release
@@ -100,8 +100,8 @@ jobs:
         uses: actions/upload-release-asset@v1
         with:
           upload_url: ${{ steps.create_release.outputs.upload_url }}
-          asset_path: dist/launcher.exe
-          asset_name: launcher.exe
+          asset_path: dist/TradeDeskERP/TradeDeskERP.exe
+          asset_name: TradeDeskERP.exe
           asset_content_type: application/octet-stream
 
       - name: Upload installer to release
