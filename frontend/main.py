@@ -17,10 +17,12 @@ from PySide6.QtWidgets import QApplication, QCheckBox, QDialog, QFormLayout, QHB
 
 try:
     from .mainwindow import MainWindow
+    from .app_version import get_app_version
     from .connection_settings import ConnectionSettings, clear_connection_settings, load_connection_settings, save_connection_settings
     from .error_messages import friendly_exception_message, friendly_http_error
 except ImportError:
     from frontend.mainwindow import MainWindow
+    from frontend.app_version import get_app_version
     from frontend.connection_settings import ConnectionSettings, clear_connection_settings, load_connection_settings, save_connection_settings
     from frontend.error_messages import friendly_exception_message, friendly_http_error
 
@@ -480,6 +482,19 @@ def main() -> int:
         else:
             return 0
 
+    load_styles(app, project_root)
+
+    # Check for updates before starting any backend or opening the login window.
+    # If an installer is launched, exit so the new build can take over cleanly.
+    if not headless_smoke:
+        try:
+            from .update_checker import check_for_update
+
+            if check_for_update(None, get_app_version()):
+                return 0
+        except Exception:
+            pass
+
     backend_proc = start_backend(project_root) if should_start_local else None
 
     if not should_start_local:
@@ -488,8 +503,6 @@ def main() -> int:
         except Exception as exc:
             QMessageBox.critical(None, "Backend Unavailable", friendly_exception_message(exc, "Connect to the backend"))
             return 1
-
-    load_styles(app, project_root)
 
     # If a diagnostic traceback file exists from a previous run, offer the
     # user the option to upload it to a secure endpoint for debugging.
@@ -592,21 +605,6 @@ def main() -> int:
             if setup_dialog.exec() != QDialog.Accepted:
                 return 0
             setup_credentials = setup_dialog.created_credentials
-
-        # Check for updates before creating the main window.
-        # This ensures the user gets the update prompt even if the currently
-        # installed build has a startup/login bug.
-        try:
-            from .update_checker import check_for_update
-
-            current_version = os.environ.get("TRADEDESK_VERSION", "0.1.0")
-            try:
-                check_for_update(None, current_version)
-            except Exception:
-                # Fail silently - update checks must not block startup
-                pass
-        except Exception:
-            pass
 
     window = MainWindow(backend_url=backend_url)
 

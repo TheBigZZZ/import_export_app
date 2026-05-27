@@ -16,6 +16,12 @@ _DOWNLOAD_CHUNK_SIZE = 1024 * 1024
 _MAX_DOWNLOAD_RETRIES = 3
 
 
+def _clean_version_label(ver: str | None) -> str:
+    if not ver:
+        return ""
+    return ver.strip().lstrip("vV").strip()
+
+
 def _parse_version(ver: str) -> Tuple[int, ...]:
     parts = []
     for p in ver.split("."):
@@ -64,7 +70,7 @@ def _download_file(url: str, target_path: Path) -> None:
     tmp_path.replace(target_path)
 
 
-def check_for_update(parent, current_version: str) -> None:
+def check_for_update(parent, current_version: str) -> bool:
     """Check a remote manifest (configured via TRADEDESK_UPDATE_MANIFEST_URL).
     If an update is available, prompt the user to download and run the installer.
     This is intentionally lightweight and uses a simple manifest format:
@@ -86,26 +92,26 @@ def check_for_update(parent, current_version: str) -> None:
         with httpx.Client(timeout=10.0, follow_redirects=True) as client:
             resp = client.get(manifest_url)
             if resp.status_code != 200:
-                return
+                return False
             body = resp.json()
     except Exception:
-        return
+        return False
 
-    remote_ver = body.get("version")
+    remote_ver = _clean_version_label(body.get("version"))
     installer = body.get("installer_url")
     checksum = _normalize_sha256(body.get("installer_sha256") or body.get("checksum"))
     if not remote_ver or not installer:
-        return
+        return False
 
     if not installer.lower().startswith("https://"):
         # For safety, only allow HTTPS update URLs.
-        return
+        return False
 
     try:
-        if _parse_version(remote_ver) <= _parse_version(current_version):
-            return
+        if _parse_version(remote_ver) <= _parse_version(_clean_version_label(current_version)):
+            return False
     except Exception:
-        return
+        return False
 
     msg = QMessageBox()
     msg.setIcon(QMessageBox.Question)
@@ -114,7 +120,7 @@ def check_for_update(parent, current_version: str) -> None:
     msg.setStandardButtons(QMessageBox.Yes | QMessageBox.No)
     res = msg.exec()
     if res != QMessageBox.Yes:
-        return
+        return False
 
     # Download installer to temp and run.
     try:
@@ -151,9 +157,11 @@ def check_for_update(parent, current_version: str) -> None:
         else:
             subprocess.Popen(["chmod", "+x", str(out)])
             subprocess.Popen([str(out)])
+        return True
     except Exception:
         err = QMessageBox()
         err.setIcon(QMessageBox.Warning)
         err.setWindowTitle("Update Failed")
         err.setText("Failed to download, verify, or launch the installer.")
         err.exec()
+        return False

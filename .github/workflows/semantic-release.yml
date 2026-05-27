@@ -132,6 +132,8 @@ jobs:
 
       - name: Build frontend executable (PyInstaller)
         run: |
+          $tag = "${{ steps.release_meta.outputs.tag_name }}"
+          Set-Content -Path version.txt -Value $tag -Encoding UTF8
           python -m PyInstaller --clean --noconfirm packaging/tradedesk.spec
 
       - name: Install Inno Setup

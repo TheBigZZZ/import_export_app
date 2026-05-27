@@ -13,6 +13,10 @@ datas = [
     (str(workspace / "packaging" / "sbom.xml"), "packaging"),
 ]
 
+version_file = workspace / "version.txt"
+if version_file.exists():
+    datas.append((str(version_file), "."))
+
 hiddenimports = collect_submodules("tradedesk") + collect_submodules("aiosqlite") + [
     "PySide6.QtCore",
     "PySide6.QtGui",
