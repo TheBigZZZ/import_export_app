@@ -34,11 +34,25 @@ jobs:
         shell: powershell
         run: |
           choco install innosetup -y --no-progress
+          if (Get-Command refreshenv -ErrorAction SilentlyContinue) { refreshenv }
 
       - name: Build installer (Inno Setup)
         shell: powershell
         run: |
-          & "C:\Program Files (x86)\Inno Setup 6\ISCC.exe" "packaging\TradeDeskERP.iss"
+          $isccCandidates = @(
+            "$env:LOCALAPPDATA\Programs\Inno Setup 6\ISCC.exe",
+            "C:\Program Files\Inno Setup 6\ISCC.exe",
+            "C:\Program Files (x86)\Inno Setup 6\ISCC.exe"
+          ) | Where-Object { $_ -and (Test-Path $_) }
+
+          $iscc = $isccCandidates | Select-Object -First 1
+          if (-not $iscc) {
+            Write-Host "ISCC.exe not found after choco install" -ForegroundColor Red
+            Get-ChildItem -Path 'C:\Program Files*\Inno Setup 6' -Recurse -Filter ISCC.exe -ErrorAction SilentlyContinue | Select-Object -ExpandProperty FullName
+            exit 1
+          }
+
+          & $iscc "packaging\TradeDeskERP.iss"
 
       - name: Generate SBOM
         run: |

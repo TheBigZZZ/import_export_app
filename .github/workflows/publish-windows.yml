@@ -73,10 +73,21 @@ jobs:
         run: |
           Write-Host "Installing NSIS via choco (if not present)"
           choco install nsis -y --no-progress
-          $nsis = Get-Command makensis -ErrorAction SilentlyContinue
-          if (-not $nsis) { Write-Host "makensis not found after choco install"; exit 1 }
+          if (Get-Command refreshenv -ErrorAction SilentlyContinue) { refreshenv }
+          $makensisCandidates = @(
+            (Get-Command makensis -ErrorAction SilentlyContinue).Source,
+            "C:\Program Files\NSIS\makensis.exe",
+            "C:\Program Files (x86)\NSIS\makensis.exe"
+          ) | Where-Object { $_ -and (Test-Path $_) }
+
+          $makensis = $makensisCandidates | Select-Object -First 1
+          if (-not $makensis) {
+            Write-Host "makensis not found after choco install" -ForegroundColor Red
+            Get-ChildItem -Path 'C:\Program Files*\NSIS' -Recurse -Filter makensis.exe -ErrorAction SilentlyContinue | Select-Object -ExpandProperty FullName
+            exit 1
+          }
           Write-Host "Running makensis to create installer"
-          makensis packaging\installer\tradedesk_installer.nsi
+          & $makensis packaging\installer\tradedesk_installer.nsi
 
       - name: Upload build artifact (workflow)
         uses: actions/upload-artifact@v4
