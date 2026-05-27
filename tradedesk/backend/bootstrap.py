@@ -4,6 +4,7 @@ from sqlalchemy import select
 
 from .database import AsyncSessionLocal
 from .models.account import AccountType, ChartOfAccount
+from .models.user import User
 
 DEFAULT_ACCOUNTS = [
     ("1000", "Cash in Hand", AccountType.asset),
