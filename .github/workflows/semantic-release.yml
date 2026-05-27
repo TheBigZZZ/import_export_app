@@ -27,7 +27,7 @@ jobs:
           # Ensure npm metadata exists (no-op if package.json already present)
           node -e "process.exit(0)"
           # Use legacy-peer-deps to avoid ERESOLVE failures in CI when plugin peer ranges don't align.
-          npm install --no-audit --no-fund --legacy-peer-deps semantic-release @semantic-release/commit-analyzer @semantic-release/release-notes-generator @semantic-release/changelog @semantic-release/npm @semantic-release/git @semantic-release/github
+          npm install --no-audit --no-fund --legacy-peer-deps semantic-release @semantic-release/commit-analyzer @semantic-release/release-notes-generator @semantic-release/changelog @semantic-release/git @semantic-release/github
 
       - name: Run semantic-release
         id: semantic
