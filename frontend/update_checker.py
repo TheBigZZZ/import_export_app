@@ -8,7 +8,120 @@ from pathlib import Path
 from typing import Tuple
 
 import httpx
-from PySide6.QtWidgets import QApplication, QDialog, QHBoxLayout, QLabel, QMessageBox, QProgressBar, QPushButton, QVBoxLayout
+
+try:  # pragma: no cover - exercised indirectly in GUI environments
+    from PySide6.QtWidgets import QApplication, QDialog, QHBoxLayout, QLabel, QMessageBox, QProgressBar, QPushButton, QVBoxLayout
+except Exception:  # pragma: no cover - used in headless CI where Qt system libs are unavailable
+    class _QtBase:
+        def __init__(self, *args, **kwargs):
+            pass
+
+    class QApplication(_QtBase):
+        @staticmethod
+        def processEvents() -> None:
+            return None
+
+    class QDialog(_QtBase):
+        Accepted = 1
+        Rejected = 0
+
+        def __init__(self, *args, **kwargs):
+            super().__init__(*args, **kwargs)
+            self._result = self.Rejected
+
+        def setWindowTitle(self, *args, **kwargs):
+            return None
+
+        def setModal(self, *args, **kwargs):
+            return None
+
+        def setMinimumWidth(self, *args, **kwargs):
+            return None
+
+        def exec(self) -> int:
+            return self._result
+
+        def accept(self) -> None:
+            self._result = self.Accepted
+
+        def reject(self) -> None:
+            self._result = self.Rejected
+
+    class QHBoxLayout(_QtBase):
+        def addStretch(self, *args, **kwargs):
+            return None
+
+        def addWidget(self, *args, **kwargs):
+            return None
+
+    class QVBoxLayout(QHBoxLayout):
+        def __init__(self, *args, **kwargs):
+            pass
+
+        def addLayout(self, *args, **kwargs):
+            return None
+
+    class QLabel(_QtBase):
+        def __init__(self, *args, **kwargs):
+            self._text = args[0] if args else ""
+
+        def setWordWrap(self, *args, **kwargs):
+            return None
+
+        def setStyleSheet(self, *args, **kwargs):
+            return None
+
+        def setObjectName(self, *args, **kwargs):
+            return None
+
+        def setText(self, text: str) -> None:
+            self._text = text
+
+    class QMessageBox(_QtBase):
+        Warning = 1
+        Question = 2
+        Yes = 1
+        No = 0
+
+        def setIcon(self, *args, **kwargs):
+            return None
+
+        def setWindowTitle(self, *args, **kwargs):
+            return None
+
+        def setText(self, *args, **kwargs):
+            return None
+
+        def setStandardButtons(self, *args, **kwargs):
+            return None
+
+        def exec(self) -> int:
+            return self.Yes
+
+    class QProgressBar(_QtBase):
+        def setRange(self, *args, **kwargs):
+            return None
+
+        def setValue(self, *args, **kwargs):
+            return None
+
+        def setTextVisible(self, *args, **kwargs):
+            return None
+
+        def hide(self):
+            return None
+
+        def show(self):
+            return None
+
+    class QPushButton(_QtBase):
+        class _Signal:
+            def connect(self, *args, **kwargs):
+                return None
+
+        def __init__(self, *args, **kwargs):
+            self.clicked = self._Signal()
+
 
 
 _DOWNLOAD_TIMEOUT = 120.0
