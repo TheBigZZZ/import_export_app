@@ -1,0 +1,47 @@
+name: Verify Release Assets
+
+on:
+  release:
+    types: [published]
+
+permissions:
+  contents: read
+  issues: write
+
+jobs:
+  check-assets:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Verify release assets
+        uses: actions/github-script@v6
+        with:
+          github-token: ${{ secrets.GITHUB_TOKEN }}
+          script: |
+            const release = context.payload.release;
+            const owner = context.repo.owner;
+            const repo = context.repo.repo;
+            const releaseId = release.id;
+            const tag = release.tag_name;
+
+            const assets = await github.rest.repos.listReleaseAssets({ owner, repo, release_id: releaseId });
+            const names = assets.data.map(a => a.name);
+
+            const expected = [
+              'TradeDeskERP.exe',
+              'TradeDeskERP-Setup.exe',
+              'updates.json'
+            ];
+
+            const missing = expected.filter(n => !names.includes(n));
+
+            let body = `Release **${tag}** asset check:\n\n`;
+            body += `Found assets: ${names.length > 0 ? names.join(', ') : '(none)'}\n\n`;
+            if (missing.length === 0) {
+              body += 'All expected assets are present.';
+            } else {
+              body += `Missing expected assets: ${missing.join(', ')}\n\n`;
+              body += 'Please inspect the release workflow logs.';
+            }
+
+            const issueTitle = `Release assets check — ${tag} — ${missing.length === 0 ? 'OK' : 'MISSING'}`;
+            await github.rest.issues.create({ owner, repo, title: issueTitle, body });
