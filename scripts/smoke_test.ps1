@@ -76,11 +76,19 @@ Write-Host "Starting TradeDesk smoke test..."
 if ($ExePath -and (Test-Path $ExePath)) {
     $exePath = $ExePath
 } else {
-    $exePath = Join-Path (Get-Location) 'dist\TradeDeskERP\TradeDeskERP.exe'
-    if (-Not (Test-Path $exePath)) {
-        # try to find any exe under dist if layout differs
-        $candidates = Get-ChildItem -Path (Join-Path (Get-Location) 'dist') -Recurse -Filter *.exe -ErrorAction SilentlyContinue | Select-Object -First 1
-        if ($candidates) { $exePath = $candidates.FullName } else { ExitWithFailure "Executable not found at expected path and no .exe in dist: $exePath" }
+    $preferred = Join-Path (Get-Location) 'dist\TradeDeskERP\TradeDeskERP.exe'
+    if (Test-Path $preferred) {
+        $exePath = $preferred
+    } else {
+        # Prefer the app bundle exe over the installer if the layout differs.
+        $candidates = Get-ChildItem -Path (Join-Path (Get-Location) 'dist') -Recurse -Filter *.exe -ErrorAction SilentlyContinue |
+            Where-Object { $_.Name -ieq 'TradeDeskERP.exe' } |
+            Select-Object -First 1
+        if ($candidates) {
+            $exePath = $candidates.FullName
+        } else {
+            ExitWithFailure "Executable not found at expected path and no app exe in dist: $preferred"
+        }
     }
 }
 
