@@ -8,7 +8,7 @@ from pathlib import Path
 from typing import Tuple
 
 import httpx
-from PySide6.QtWidgets import QMessageBox
+from PySide6.QtWidgets import QApplication, QDialog, QHBoxLayout, QLabel, QMessageBox, QProgressBar, QPushButton, QVBoxLayout
 
 
 _DOWNLOAD_TIMEOUT = 120.0
@@ -58,16 +58,102 @@ def _sha256_file(path: Path) -> str:
     return digest.hexdigest()
 
 
-def _download_file(url: str, target_path: Path) -> None:
-    tmp_path = target_path.with_suffix(target_path.suffix + ".part")
-    with httpx.Client(timeout=_DOWNLOAD_TIMEOUT, follow_redirects=True) as client:
-        with client.stream("GET", url) as resp:
-            resp.raise_for_status()
-            with tmp_path.open("wb") as fh:
-                for chunk in resp.iter_bytes(chunk_size=_DOWNLOAD_CHUNK_SIZE):
-                    if chunk:
+def _format_bytes(value: int) -> str:
+    units = ["B", "KB", "MB", "GB"]
+    size = float(max(value, 0))
+    for unit in units:
+        if size < 1024.0 or unit == units[-1]:
+            if unit == "B":
+                return f"{int(size)} {unit}"
+            return f"{size:.1f} {unit}"
+        size /= 1024.0
+    return f"{int(size)} B"
+
+
+class UpdateDialog(QDialog):
+    def __init__(self, remote_version: str, installer_name: str, parent=None):
+        super().__init__(parent)
+        self.setWindowTitle("TradeDesk Update Available")
+        self.setModal(True)
+        self.setMinimumWidth(520)
+
+        self.title_label = QLabel(f"A new version ({remote_version}) is ready to install.")
+        self.title_label.setWordWrap(True)
+        self.title_label.setStyleSheet("font-size: 16px; font-weight: 600;")
+
+        self.body_label = QLabel(
+            f"TradeDesk will download {installer_name} from GitHub, verify it, then launch the installer and close the current app."
+        )
+        self.body_label.setWordWrap(True)
+
+        self.status_label = QLabel("Click Update Now to begin.")
+        self.status_label.setWordWrap(True)
+        self.status_label.setObjectName("mutedLabel")
+
+        self.progress = QProgressBar()
+        self.progress.setRange(0, 100)
+        self.progress.setValue(0)
+        self.progress.setTextVisible(True)
+        self.progress.hide()
+
+        self.update_button = QPushButton("Update Now")
+        self.update_button.clicked.connect(self.accept)
+        self.later_button = QPushButton("Later")
+        self.later_button.clicked.connect(self.reject)
+
+        buttons = QHBoxLayout()
+        buttons.addStretch(1)
+        buttons.addWidget(self.update_button)
+        buttons.addWidget(self.later_button)
+
+        layout = QVBoxLayout(self)
+        layout.addWidget(self.title_label)
+        layout.addWidget(self.body_label)
+        layout.addWidget(self.status_label)
+        layout.addWidget(self.progress)
+        layout.addLayout(buttons)
+
+    def _set_busy(self, text: str) -> None:
+        self.progress.setRange(0, 0)
+        self.progress.show()
+        self.status_label.setText(text)
+        QApplication.processEvents()
+
+    def _set_progress(self, percent: int, text: str) -> None:
+        self.progress.setRange(0, 100)
+        self.progress.setValue(max(0, min(percent, 100)))
+        self.status_label.setText(text)
+        QApplication.processEvents()
+
+    def _download_with_progress(self, url: str, target_path: Path) -> None:
+        tmp_path = target_path.with_suffix(target_path.suffix + ".part")
+        with httpx.Client(timeout=_DOWNLOAD_TIMEOUT, follow_redirects=True) as client:
+            with client.stream("GET", url) as resp:
+                resp.raise_for_status()
+                total = int(resp.headers.get("content-length") or 0)
+                downloaded = 0
+                self._set_busy("Downloading update package...")
+                with tmp_path.open("wb") as fh:
+                    for chunk in resp.iter_bytes(chunk_size=_DOWNLOAD_CHUNK_SIZE):
+                        if not chunk:
+                            continue
                         fh.write(chunk)
-    tmp_path.replace(target_path)
+                        downloaded += len(chunk)
+                        if total > 0:
+                            percent = int((downloaded / total) * 100)
+                            self._set_progress(percent, f"Downloading update package... {_format_bytes(downloaded)} / {_format_bytes(total)}")
+                        else:
+                            self._set_busy(f"Downloading update package... {_format_bytes(downloaded)}")
+        tmp_path.replace(target_path)
+
+    def run_download(self, installer_url: str, target_path: Path) -> None:
+        self.update_button.setEnabled(False)
+        self.later_button.setEnabled(False)
+        self._download_with_progress(installer_url, target_path)
+        self._set_progress(100, "Verifying download...")
+
+    def set_launching(self) -> None:
+        self._set_progress(100, "Launching installer and closing TradeDesk...")
 
 
 def check_for_update(parent, current_version: str) -> bool:
@@ -113,24 +199,21 @@ def check_for_update(parent, current_version: str) -> bool:
     except Exception:
         return False
 
-    msg = QMessageBox()
-    msg.setIcon(QMessageBox.Question)
-    msg.setWindowTitle("Update Available")
-    msg.setText(f"A new version ({remote_ver}) is available. Download and install now?")
-    msg.setStandardButtons(QMessageBox.Yes | QMessageBox.No)
-    res = msg.exec()
-    if res != QMessageBox.Yes:
+    installer_name = Path(str(installer)).name
+
+    prompt = UpdateDialog(remote_ver, installer_name, parent)
+    if prompt.exec() != QDialog.Accepted:
         return False
 
     # Download installer to temp and run.
     try:
         tmpdir = Path(tempfile.gettempdir())
-        out = tmpdir / f"tradedesk-update-{remote_ver}-{Path(installer).name}"
+        out = tmpdir / f"tradedesk-update-{remote_ver}-{installer_name}"
 
         last_error: Exception | None = None
         for _ in range(_MAX_DOWNLOAD_RETRIES):
             try:
-                _download_file(installer, out)
+                prompt.run_download(installer, out)
                 last_error = None
                 break
             except Exception as exc:  # pragma: no cover - network/runtime behavior
@@ -152,6 +235,7 @@ def check_for_update(parent, current_version: str) -> bool:
             raise RuntimeError("Update manifest missing installer checksum.")
 
         # Attempt to launch installer (non-blocking)
+        prompt.set_launching()
         if os.name == "nt":
             subprocess.Popen([str(out)], shell=False)
         else:
