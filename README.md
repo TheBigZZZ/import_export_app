@@ -67,10 +67,11 @@ cd ../..
 python -m frontend.main
 ```
 
-Default first-run admin credentials:
+First-run admin setup:
 
-- On a fresh database, the app creates a super-admin account automatically and stores its credentials in `~/TradeDesk/default-super-admin.json`
-- The login screen pre-fills those credentials on first launch, but you still have to click `Login`
+- On a fresh database, the desktop app now shows a first-run admin setup wizard before the login screen.
+- Create the initial super-admin in that wizard, then share those credentials only with the trusted owner.
+- If you want the app to remember them on that PC, use the wizard's save option or create the admin with `--init-admin` during unattended setup.
 
 Create initial admin via CLI (recommended for installers)
 

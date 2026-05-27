@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import argparse
+import json
 import os
 import subprocess
 import sys
@@ -17,9 +18,11 @@ from PySide6.QtWidgets import QApplication, QCheckBox, QDialog, QFormLayout, QHB
 try:
     from .mainwindow import MainWindow
     from .connection_settings import ConnectionSettings, clear_connection_settings, load_connection_settings, save_connection_settings
+    from .error_messages import friendly_exception_message, friendly_http_error
 except ImportError:
     from frontend.mainwindow import MainWindow
     from frontend.connection_settings import ConnectionSettings, clear_connection_settings, load_connection_settings, save_connection_settings
+    from frontend.error_messages import friendly_exception_message, friendly_http_error
 
 BACKEND_PORT = 8742
 BACKEND_STARTUP_TIMEOUT_SECONDS = 90
@@ -213,6 +216,123 @@ class SetupHelpDialog(QDialog):
         layout.addLayout(buttons)
 
 
+class InitialAdminSetupDialog(QDialog):
+    def __init__(self, backend_url: str, parent=None):
+        super().__init__(parent)
+        self.backend_url = backend_url.rstrip("/")
+        self.setWindowTitle("First-Run Admin Setup")
+        self.setModal(True)
+        self.resize(640, 440)
+
+        intro = QLabel(
+            "Create the first super-admin account for this backend now. Share these credentials only with the trusted owner who will manage the system."
+        )
+        intro.setWordWrap(True)
+
+        form = QFormLayout()
+        self.full_name = QLineEdit()
+        self.username = QLineEdit()
+        self.email = QLineEdit()
+        self.password = QLineEdit()
+        self.confirm_password = QLineEdit()
+        self.password.setEchoMode(QLineEdit.Password)
+        self.confirm_password.setEchoMode(QLineEdit.Password)
+        self.password.setPlaceholderText("At least 8 characters with upper, lower, number, and symbol")
+        self.confirm_password.setPlaceholderText("Repeat the password")
+        self.remember_credentials = QCheckBox("Save these credentials on this PC for the next launch")
+        self.remember_credentials.setChecked(False)
+
+        self.error = QLabel("")
+        self.error.setWordWrap(True)
+        self.error.setStyleSheet("color: #E53935;")
+
+        help_button = QPushButton("Setup Help")
+        help_button.clicked.connect(self._show_setup_help)
+        create_button = QPushButton("Create Admin")
+        create_button.clicked.connect(self._create_admin)
+        cancel_button = QPushButton("Cancel")
+        cancel_button.clicked.connect(self.reject)
+
+        form.addRow("Full Name", self.full_name)
+        form.addRow("Username", self.username)
+        form.addRow("Email", self.email)
+        form.addRow("Password", self.password)
+        form.addRow("Confirm Password", self.confirm_password)
+        form.addRow("", self.remember_credentials)
+
+        buttons = QHBoxLayout()
+        buttons.addWidget(help_button)
+        buttons.addStretch(1)
+        buttons.addWidget(create_button)
+        buttons.addWidget(cancel_button)
+
+        layout = QVBoxLayout(self)
+        layout.addWidget(intro)
+        layout.addLayout(form)
+        layout.addWidget(self.error)
+        layout.addLayout(buttons)
+
+        self.created_credentials: dict[str, str] | None = None
+
+    def _show_setup_help(self) -> None:
+        dialog = SetupHelpDialog(self)
+        dialog.exec()
+
+    def _create_admin(self) -> None:
+        self.error.setText("")
+
+        full_name = self.full_name.text().strip()
+        username = self.username.text().strip()
+        email = self.email.text().strip() or None
+        password = self.password.text()
+        confirm = self.confirm_password.text()
+
+        if not full_name or not username or not password:
+            self.error.setText("Full name, username, and password are required.")
+            return
+        if password != confirm:
+            self.error.setText("Passwords do not match.")
+            return
+
+        payload = {
+            "full_name": full_name,
+            "username": username,
+            "email": email,
+            "password": password,
+            "role": "super_admin",
+        }
+
+        try:
+            response = httpx.post(f"{self.backend_url}/api/setup", json=payload, timeout=30.0)
+        except Exception as exc:
+            self.error.setText(friendly_exception_message(exc, "Create the first admin"))
+            return
+
+        if response.status_code not in (200, 201):
+            self.error.setText(friendly_http_error(response, "Create the first admin"))
+            return
+
+        self.created_credentials = {"username": username, "password": password}
+
+        if self.remember_credentials.isChecked():
+            credentials_path = Path.home() / "TradeDesk" / "default-super-admin.json"
+            credentials_path.parent.mkdir(parents=True, exist_ok=True)
+            credentials_path.write_text(
+                json.dumps(
+                    {
+                        "username": username,
+                        "full_name": full_name,
+                        "email": email,
+                        "password": password,
+                    },
+                    indent=2,
+                ),
+                encoding="utf-8",
+            )
+
+        self.accept()
+
+
 def _run_backend_server() -> None:
     import tempfile
 
@@ -305,6 +425,23 @@ def wait_for_backend(backend_url: str) -> None:
     raise RuntimeError(f"Backend not reachable at {backend_url}")
 
 
+def fetch_setup_status(backend_url: str) -> dict[str, Any] | None:
+    try:
+        response = httpx.get(f"{backend_url}/api/setup/status", timeout=5.0)
+    except Exception:
+        return None
+
+    if response.status_code != 200:
+        return None
+
+    try:
+        body = response.json()
+    except Exception:
+        return None
+
+    return body if isinstance(body, dict) else None
+
+
 def stop_backend(proc: Any) -> None:
     proc.terminate()
     if hasattr(proc, "wait"):
@@ -326,6 +463,7 @@ def main() -> int:
         project_root = Path(__file__).resolve().parents[1]
 
     app = QApplication(sys.argv)
+    headless_smoke = _is_truthy(os.environ.get("TRADEDESK_HEADLESS_SMOKE"))
 
     backend_url, should_start_local, should_prompt = _resolve_backend_target()
 
@@ -348,7 +486,7 @@ def main() -> int:
         try:
             wait_for_backend(backend_url)
         except Exception as exc:
-            QMessageBox.critical(None, "Backend Unavailable", str(exc))
+            QMessageBox.critical(None, "Backend Unavailable", friendly_exception_message(exc, "Connect to the backend"))
             return 1
 
     load_styles(app, project_root)
@@ -446,22 +584,35 @@ def main() -> int:
         # keep UI responsive if diagnostics flow fails
         pass
 
-    # Check for updates before creating the main window.
-    # This ensures the user gets the update prompt even if the currently
-    # installed build has a startup/login bug.
-    try:
-        from .update_checker import check_for_update
+    setup_credentials: dict[str, str] | None = None
+    if not headless_smoke:
+        setup_status = fetch_setup_status(backend_url)
+        if setup_status and setup_status.get("needs_initial_admin"):
+            setup_dialog = InitialAdminSetupDialog(backend_url)
+            if setup_dialog.exec() != QDialog.Accepted:
+                return 0
+            setup_credentials = setup_dialog.created_credentials
 
-        current_version = os.environ.get("TRADEDESK_VERSION", "0.1.0")
+        # Check for updates before creating the main window.
+        # This ensures the user gets the update prompt even if the currently
+        # installed build has a startup/login bug.
         try:
-            check_for_update(None, current_version)
+            from .update_checker import check_for_update
+
+            current_version = os.environ.get("TRADEDESK_VERSION", "0.1.0")
+            try:
+                check_for_update(None, current_version)
+            except Exception:
+                # Fail silently - update checks must not block startup
+                pass
         except Exception:
-            # Fail silently - update checks must not block startup
             pass
-    except Exception:
-        pass
 
     window = MainWindow(backend_url=backend_url)
+
+    if not headless_smoke:
+        if not window.ensure_login(initial_credentials=setup_credentials):
+            return 0
 
     window.show()
 

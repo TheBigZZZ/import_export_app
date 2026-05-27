@@ -2,8 +2,9 @@ from __future__ import annotations
 
 import asyncio
 
-from PySide6.QtWidgets import QCheckBox, QFormLayout, QGroupBox, QHBoxLayout, QLabel, QLineEdit, QMessageBox, QPushButton
+from PySide6.QtWidgets import QCheckBox, QFormLayout, QGroupBox, QHBoxLayout, QLabel, QLineEdit, QMessageBox, QPushButton, QScrollArea, QVBoxLayout, QWidget
 
+from ..error_messages import friendly_exception_message, friendly_http_error
 from ..widgets.data_table import DataTable
 from .base import BaseModuleWidget
 
@@ -17,8 +18,23 @@ class SettingsModule(BaseModuleWidget):
 
         self.backups_table = DataTable()
 
+        scroll = QScrollArea()
+        scroll.setWidgetResizable(True)
+        scroll.setFrameShape(QScrollArea.NoFrame)
+
+        content = QWidget()
+        content_layout = QVBoxLayout(content)
+        content_layout.setContentsMargins(4, 4, 4, 4)
+        content_layout.setSpacing(14)
+        scroll.setWidget(content)
+
+        layout = self.layout()
+        layout.setSpacing(8)
+        layout.addWidget(scroll)
+
         company_box = QGroupBox("Company Settings")
         form = QFormLayout(company_box)
+        form.setVerticalSpacing(10)
         self.company_name = QLineEdit()
         self.company_address = QLineEdit()
         self.company_phone = QLineEdit()
@@ -77,12 +93,13 @@ class SettingsModule(BaseModuleWidget):
         backup_layout.addRow("Restore File", self.restore_file_name)
         backup_layout.addRow("", backup_actions)
 
-        self.layout().addWidget(company_box)
-        self.layout().addWidget(email_box)
-        self.layout().addWidget(backup_box)
+        content_layout.addWidget(company_box)
+        content_layout.addWidget(email_box)
+        content_layout.addWidget(backup_box)
         # Exchange rates section
         rates_box = QGroupBox("Exchange Rates")
         rates_layout = QFormLayout(rates_box)
+        rates_layout.setVerticalSpacing(10)
         self.rate_from = QLineEdit()
         self.rate_to = QLineEdit()
         self.rate_value = QLineEdit()
@@ -106,8 +123,8 @@ class SettingsModule(BaseModuleWidget):
         rates_layout.addRow("", rowh)
 
         self.rates_table = DataTable()
-        self.layout().addWidget(rates_box)
-        self.layout().addWidget(self.rates_table)
+        content_layout.addWidget(rates_box)
+        content_layout.addWidget(self.rates_table)
 
         # SMS test
         sms_box = QGroupBox("SMS / Notifications")
@@ -120,9 +137,9 @@ class SettingsModule(BaseModuleWidget):
         sms_form.addRow("To Number", self.sms_to)
         sms_form.addRow("Message", self.sms_message)
         sms_form.addRow("", sms_test_btn)
-        self.layout().addWidget(sms_box)
-        self.layout().addWidget(QLabel("Available Backups"))
-        self.layout().addWidget(self.backups_table)
+        content_layout.addWidget(sms_box)
+        content_layout.addWidget(QLabel("Available Backups"))
+        content_layout.addWidget(self.backups_table)
 
     def refresh(self) -> None:
         self.load_settings()
@@ -134,7 +151,7 @@ class SettingsModule(BaseModuleWidget):
             response.raise_for_status()
             data = response.json()
         except Exception as exc:
-            QMessageBox.warning(self, "Settings", str(exc))
+            QMessageBox.warning(self, "Settings", friendly_exception_message(exc, "Load settings"))
             return
 
         self.company_name.setText(data.get("company_name") or "")
@@ -180,7 +197,7 @@ class SettingsModule(BaseModuleWidget):
             response = asyncio.run(self.api_client.put("/api/settings", json=payload))
             response.raise_for_status()
         except Exception as exc:
-            QMessageBox.warning(self, "Settings", str(exc))
+            QMessageBox.warning(self, "Settings", friendly_exception_message(exc, "Save settings"))
             return
         QMessageBox.information(self, "Settings", "Settings saved")
 
@@ -195,9 +212,9 @@ class SettingsModule(BaseModuleWidget):
             if response.status_code == 200:
                 QMessageBox.information(self, "Test Email", "Test email sent (or queued)")
             else:
-                QMessageBox.warning(self, "Test Email", f"Send failed: {response.status_code} {response.text}")
+                QMessageBox.warning(self, "Test Email", friendly_http_error(response, "Send test email"))
         except Exception as exc:
-            QMessageBox.warning(self, "Test Email", str(exc))
+            QMessageBox.warning(self, "Test Email", friendly_exception_message(exc, "Send test email"))
 
     def load_backups(self) -> None:
         try:
@@ -205,7 +222,7 @@ class SettingsModule(BaseModuleWidget):
             response.raise_for_status()
             rows = response.json()
         except Exception as exc:
-            QMessageBox.warning(self, "Backups", str(exc))
+            QMessageBox.warning(self, "Backups", friendly_exception_message(exc, "Load backups"))
             return
 
         table_rows = [
@@ -220,7 +237,7 @@ class SettingsModule(BaseModuleWidget):
             response.raise_for_status()
             data = response.json()
         except Exception as exc:
-            QMessageBox.warning(self, 'Exchange Rates', str(exc))
+            QMessageBox.warning(self, 'Exchange Rates', friendly_exception_message(exc, 'Load exchange rates'))
             return
 
         rows = [[str(item.get('id') or ''), item.get('currency_from'), item.get('currency_to'), str(item.get('rate')), item.get('effective_date')] for item in data]
@@ -243,16 +260,16 @@ class SettingsModule(BaseModuleWidget):
                 QMessageBox.information(self, 'Exchange Rates', 'Rate created')
                 self.load_rates()
             else:
-                QMessageBox.warning(self, 'Exchange Rates', f'Create failed: {response.status_code} {response.text}')
+                QMessageBox.warning(self, 'Exchange Rates', friendly_http_error(response, 'Create exchange rate'))
         except Exception as exc:
-            QMessageBox.warning(self, 'Exchange Rates', str(exc))
+            QMessageBox.warning(self, 'Exchange Rates', friendly_exception_message(exc, 'Create exchange rate'))
 
     def create_backup(self) -> None:
         try:
             response = asyncio.run(self.api_client.post("/api/settings/backups", json={}))
             response.raise_for_status()
         except Exception as exc:
-            QMessageBox.warning(self, "Backups", str(exc))
+            QMessageBox.warning(self, "Backups", friendly_exception_message(exc, "Create backup"))
             return
         QMessageBox.information(self, "Backups", "Backup created")
         self.load_backups()
@@ -268,9 +285,9 @@ class SettingsModule(BaseModuleWidget):
             if response.status_code == 200 and response.json().get('ok'):
                 QMessageBox.information(self, 'Test SMS', 'SMS sent (or logged)')
             else:
-                QMessageBox.warning(self, 'Test SMS', f"Send failed: {response.status_code} {response.text}")
+                QMessageBox.warning(self, 'Test SMS', friendly_http_error(response, 'Send test SMS'))
         except Exception as exc:
-            QMessageBox.warning(self, 'Test SMS', str(exc))
+            QMessageBox.warning(self, 'Test SMS', friendly_exception_message(exc, 'Send test SMS'))
 
     def restore_backup(self) -> None:
         file_name = self.restore_file_name.text().strip()
@@ -282,6 +299,6 @@ class SettingsModule(BaseModuleWidget):
             response = asyncio.run(self.api_client.post("/api/settings/backups/restore", json={"file_name": file_name}))
             response.raise_for_status()
         except Exception as exc:
-            QMessageBox.warning(self, "Restore", str(exc))
+            QMessageBox.warning(self, "Restore", friendly_exception_message(exc, "Restore backup"))
             return
         QMessageBox.information(self, "Restore", "Backup restored. Restart app if data view is stale.")

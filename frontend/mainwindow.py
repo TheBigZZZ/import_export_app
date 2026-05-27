@@ -2,8 +2,8 @@ from __future__ import annotations
 
 import asyncio
 import json
-from pathlib import Path
 from dataclasses import dataclass
+from pathlib import Path
 
 from PySide6.QtCore import QTimer, Qt
 from PySide6.QtWidgets import (
@@ -17,12 +17,13 @@ from PySide6.QtWidgets import (
     QPushButton,
     QStackedWidget,
     QStatusBar,
+    QTextBrowser,
     QVBoxLayout,
     QWidget,
-    QTextBrowser,
 )
 
 from .api_client import ApiClient
+from .error_messages import friendly_exception_message, friendly_http_error
 from .live_updates import LiveUpdateMonitor
 from .modules import (
     BanksModule,
@@ -66,6 +67,7 @@ class LoginDialog(QDialog):
 
         self.error = QLabel("")
         self.error.setStyleSheet("color: #E53935;")
+        self.error.setWordWrap(True)
 
         self.help_button = QPushButton("Setup Help")
         self.help_button.clicked.connect(self._show_setup_help)
@@ -88,6 +90,18 @@ class LoginDialog(QDialog):
     def _show_setup_help(self) -> None:
         dialog = SetupHelpDialog(self)
         dialog.exec()
+
+    def prefill(self, username: str | None = None, password: str | None = None) -> None:
+        if username:
+            self.username.setText(username)
+        if password:
+            self.password.setText(password)
+
+    def clear_error(self) -> None:
+        self.error.setText("")
+
+    def show_error(self, message: str) -> None:
+        self.error.setText(message)
 
 
 class SetupHelpDialog(QDialog):
@@ -184,6 +198,7 @@ class MainWindow(QMainWindow):
 
         self.api_client = ApiClient(backend_url)
         self.live_monitor: LiveUpdateMonitor | None = None
+        self.user_role: str | None = None
         self.current_module_key = "dashboard"
         self._pending_live_modules: set[str] = set()
         self._live_refresh_timer = QTimer(self)
@@ -238,8 +253,6 @@ class MainWindow(QMainWindow):
 
         self._update_connection_indicator()
 
-        self.ensure_login()
-
     def _build_modules(self) -> None:
         entries = [
             ModuleEntry("dashboard", "Dashboard", DashboardModule),
@@ -260,7 +273,6 @@ class MainWindow(QMainWindow):
         ]
 
         for index, entry in enumerate(entries):
-            # Respect server-side enable_user_module and role-based visibility later; widgets created now and adjusted after login
             button = QPushButton(entry.label)
             button.setCheckable(True)
             button.clicked.connect(lambda checked=False, key=entry.key: self.switch_module(key))
@@ -275,105 +287,17 @@ class MainWindow(QMainWindow):
                 button.setChecked(True)
                 self.stack.setCurrentWidget(widget)
 
+        users_button = self.module_buttons.get("users")
+        if users_button is not None:
+            users_button.hide()
+
         self.sidebar_layout.addStretch(1)
 
-    def switch_module(self, key: str) -> None:
-        self.current_module_key = key
-        for name, button in self.module_buttons.items():
-            button.setChecked(name == key)
-
-        widget = self.module_widgets[key]
-        self.stack.setCurrentWidget(widget)
-        refresh = getattr(widget, "refresh", None)
-        if callable(refresh):
-            refresh()
-
-    def ensure_login(self) -> None:
-        dialog = LoginDialog(self)
-        credentials_path = Path.home() / "TradeDesk" / "default-super-admin.json"
-        if credentials_path.exists():
-            try:
-                creds = json.loads(credentials_path.read_text(encoding="utf-8"))
-                dialog.username.setText(creds.get("username") or "")
-                dialog.password.setText(creds.get("password") or "")
-            except Exception:
-                pass
-
-        if dialog.exec() != QDialog.Accepted:
-            self.close()
-            return
-
-        username = dialog.username.text().strip()
-        password = dialog.password.text()
-
-        try:
-            response = asyncio.run(
-                self.api_client.post(
-                    "/api/auth/login",
-                    json={"username": username, "password": password},
-                    auth=False,
-                )
-            )
-        except Exception as exc:
-            QMessageBox.critical(self, "Connection Error", str(exc))
-            self.close()
-            return
-
-        if response.status_code != 200:
-            QMessageBox.warning(self, "Login Failed", response.text)
-            self.ensure_login()
-            return
-
-        payload = response.json()
-        self.api_client.set_tokens(payload["access_token"], payload["refresh_token"])
-        self.user_label.setText(f"Logged in: {username}")
-        # Fetch current user to learn role and adjust UI
-        try:
-            me_resp = asyncio.run(self.api_client.get('/api/auth/me'))
-            if me_resp.status_code == 200:
-                me = me_resp.json()
-                self.user_role = me.get('role')
-            else:
-                self.user_role = None
-        except Exception:
-            self.user_role = None
-
-        # Hide the Users module unless the signed-in user is a super admin.
-        try:
-            # check server-side feature flag
-            import requests
-            root = self.api_client.base_url
-            resp = requests.get(f"{root}/api/settings")
-            if resp.ok:
-                settings = resp.json()
-                enable_users = settings.get('enable_user_module', True)
-            else:
-                enable_users = True
-        except Exception:
-            enable_users = True
-
-        if not enable_users or getattr(self, 'user_role', None) != 'super_admin':
-            btn = self.module_buttons.get('users')
-            if btn:
-                btn.hide()
-
-        self._start_live_monitor()
-
-    def _start_live_monitor(self) -> None:
-        self._stop_live_monitor()
-        self.live_monitor = LiveUpdateMonitor(self.api_client)
-        self.live_monitor.connected.connect(self._on_live_connected)
-        self.live_monitor.disconnected.connect(self._on_live_disconnected)
-        self.live_monitor.event_received.connect(self._on_live_event)
-        self.live_monitor.start()
-
-    def _stop_live_monitor(self) -> None:
-        if self.live_monitor is not None:
-            self.live_monitor.stop()
-            self.live_monitor = None
-
-    def _on_live_connected(self) -> None:
-        self.statusBar().showMessage("Live sync connected", 3000)
+    def _apply_user_visibility(self) -> None:
+        users_button = self.module_buttons.get("users")
+        can_view_users = self.user_role == "super_admin"
+        if users_button is not None:
+            users_button.setVisible(can_view_users)
         self._update_connection_indicator(connected=True)
 
     def _on_live_disconnected(self, message: str) -> None:
@@ -456,8 +380,11 @@ class MainWindow(QMainWindow):
         self._stop_live_monitor()
         self.api_client.clear_tokens()
         self.user_label.setText("Not logged in")
+        self.user_role = None
+        self._apply_user_visibility()
         self._update_connection_indicator(connected=False)
-        self.ensure_login()
+        if not self.ensure_login():
+            self.close()
 
     def closeEvent(self, event):
         self._stop_live_monitor()

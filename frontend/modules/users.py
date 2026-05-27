@@ -16,6 +16,7 @@ from PySide6.QtWidgets import (
 )
 import re
 
+from ..error_messages import friendly_exception_message, friendly_http_error
 from ..widgets.data_table import DataTable
 from .base import BaseModuleWidget
 
@@ -99,11 +100,11 @@ class UsersModule(BaseModuleWidget):
         try:
             response = asyncio.run(self.api_client.get("/api/users"))
         except Exception as exc:
-            QMessageBox.warning(self, "Users", str(exc))
+            QMessageBox.warning(self, "Users", friendly_exception_message(exc, "Load users"))
             return
 
         if response.status_code != 200:
-            QMessageBox.warning(self, "Users", f"Error: {response.status_code} {response.text}")
+            QMessageBox.warning(self, "Users", friendly_http_error(response, "Load users"))
             return
 
         data = response.json()
@@ -160,11 +161,11 @@ class UsersModule(BaseModuleWidget):
             w = self.window()
             try:
                 if w and hasattr(w, 'statusBar'):
-                    w.statusBar().showMessage(str(exc), 5000)
+                    w.statusBar().showMessage(friendly_exception_message(exc, "Create user"), 5000)
                     return
             except Exception:
                 pass
-            QMessageBox.warning(self, "Create User", str(exc))
+            QMessageBox.warning(self, "Create User", friendly_exception_message(exc, "Create user"))
             return
 
         if response.status_code != 201:
@@ -192,11 +193,11 @@ class UsersModule(BaseModuleWidget):
                                 self.role_error.setText(msg)
                         return
                     else:
-                        QMessageBox.warning(self, "Create User", str(detail))
+                        QMessageBox.warning(self, "Create User", friendly_http_error(response, "Create user"))
                 else:
-                    QMessageBox.warning(self, "Create User", str(data))
+                    QMessageBox.warning(self, "Create User", friendly_http_error(response, "Create user"))
             except Exception:
-                QMessageBox.warning(self, "Create User", f"Error: {response.status_code} {response.text}")
+                QMessageBox.warning(self, "Create User", friendly_http_error(response, "Create user"))
             return
 
         self.username_input.clear()
@@ -257,14 +258,14 @@ class UsersModule(BaseModuleWidget):
                         if failed:
                             errors.extend([f"{f}: failed" for f in failed])
                     else:
-                        errors.append(f"bulk-delete failed: {resp.status_code} {resp.text}")
+                        errors.append(friendly_http_error(resp, "Delete users"))
                     break
                 else:
                     response = asyncio.run(self.api_client.delete(f"/api/users/{uid}"))
                     if response.status_code not in (200, 204):
-                        errors.append(f"{uid}: {response.status_code} {response.text}")
+                        errors.append(f"{uid}: {friendly_http_error(response, 'Delete user')}")
             except Exception as exc:
-                errors.append(str(exc))
+                errors.append(friendly_exception_message(exc, "Delete user"))
 
         if errors:
             QMessageBox.warning(self, "Delete User", "Some deletes failed:\n" + "\n".join(errors))

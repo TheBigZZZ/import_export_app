@@ -8,6 +8,13 @@ from ..schemas.user import UserCreate, UserRead
 router = APIRouter()
 
 
+@router.get("/status")
+async def setup_status(db: AsyncSession = Depends(get_db)) -> dict[str, int | bool]:
+    service = UserService(db)
+    users = await service.list_users()
+    return {"needs_initial_admin": len(users) == 0, "user_count": len(users)}
+
+
 @router.post("", response_model=UserRead, status_code=status.HTTP_201_CREATED)
 async def create_initial_admin(payload: UserCreate, db: AsyncSession = Depends(get_db)):
     """Create the initial administrator account. This endpoint is only allowed when
