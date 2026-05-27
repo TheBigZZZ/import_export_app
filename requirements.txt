@@ -3,4 +3,5 @@ PySide6==6.9.2
 keyring==25.6.0
 pytest==8.4.2
 pytest-asyncio==1.1.0
-reportlab==3.6.12
+# ReportLab is pinned for builds in packaging/requirements-pinned.txt
+# to avoid conflicts with packaging build pins. See packaging/requirements-pinned.txt
