@@ -95,7 +95,7 @@ jobs:
           name: tradedesk-exe
           path: |
             dist/TradeDeskERP/TradeDeskERP.exe
-            dist/TradeDesk-Setup.exe
+            dist/TradeDeskERP-Setup.exe
 
       - name: Create GitHub Release
         id: create_release
@@ -119,6 +119,6 @@ jobs:
         uses: actions/upload-release-asset@v1
         with:
           upload_url: ${{ steps.create_release.outputs.upload_url }}
-          asset_path: dist/TradeDesk-Setup.exe
-          asset_name: TradeDesk-Setup.exe
+          asset_path: dist/TradeDeskERP-Setup.exe
+          asset_name: TradeDeskERP-Setup.exe
           asset_content_type: application/octet-stream

@@ -1,9 +1,9 @@
 ; NSIS installer script for TradeDesk
 ; Produces dist\TradeDesk-Setup.exe
 
-Name "TradeDesk"
-OutFile "dist\\TradeDesk-Setup.exe"
-InstallDir "$PROGRAMFILES\\TradeDesk"
+Name "TradeDeskERP"
+OutFile "dist\\TradeDeskERP-Setup.exe"
+InstallDir "$PROGRAMFILES\\TradeDeskERP"
 SetCompress auto
 SetCompressor lzma
 
@@ -12,16 +12,16 @@ Page instfiles
 
 Section "Install"
   SetOutPath "$INSTDIR"
-  File "dist\\launcher.exe"
-  CreateDirectory "$SMPROGRAMS\\TradeDesk"
-  CreateShortCut "$SMPROGRAMS\\TradeDesk\\TradeDesk.lnk" "$INSTDIR\\launcher.exe"
+  File "dist\\TradeDeskERP\\TradeDeskERP.exe"
+  CreateDirectory "$SMPROGRAMS\\TradeDeskERP"
+  CreateShortCut "$SMPROGRAMS\\TradeDeskERP\\TradeDeskERP.lnk" "$INSTDIR\\TradeDeskERP.exe"
   WriteUninstaller "$INSTDIR\\uninstall.exe"
 SectionEnd
 
 Section "Uninstall"
-  Delete "$INSTDIR\\launcher.exe"
-  Delete "$SMPROGRAMS\\TradeDesk\\TradeDesk.lnk"
-  RMDir "$SMPROGRAMS\\TradeDesk"
+  Delete "$INSTDIR\\TradeDeskERP.exe"
+  Delete "$SMPROGRAMS\\TradeDeskERP\\TradeDeskERP.lnk"
+  RMDir "$SMPROGRAMS\\TradeDeskERP"
   Delete "$INSTDIR\\uninstall.exe"
   RMDir "$INSTDIR"
 SectionEnd
