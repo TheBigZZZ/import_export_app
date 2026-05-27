@@ -26,6 +26,10 @@ BACKEND_STARTUP_TIMEOUT_SECONDS = 90
 BACKEND_STARTUP_POLL_INTERVAL_SECONDS = 0.5
 
 
+def _is_truthy(value: str | None) -> bool:
+    return str(value).strip().lower() in {"1", "true", "yes", "on"}
+
+
 def _resolve_backend_target() -> tuple[str, bool, bool]:
     parser = argparse.ArgumentParser(add_help=False)
     parser.add_argument("--backend-url")
@@ -46,6 +50,9 @@ def _resolve_backend_target() -> tuple[str, bool, bool]:
                 backend_url = f"http://{backend_url}"
             is_local = backend_url.startswith("http://127.0.0.1") or backend_url.startswith("http://localhost")
             return backend_url.rstrip("/"), is_local, False
+
+    if _is_truthy(os.environ.get("TRADEDESK_HEADLESS_SMOKE")):
+        return f"http://127.0.0.1:{BACKEND_PORT}", True, False
 
     return f"http://127.0.0.1:{BACKEND_PORT}", True, True
 

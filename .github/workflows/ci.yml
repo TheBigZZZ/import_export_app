@@ -168,6 +168,8 @@ jobs:
       - name: Run Windows smoke test
         if: always()
         shell: powershell
+        env:
+          TRADEDESK_HEADLESS_SMOKE: "1"
         run: |
           if (-not $env:EXE_PATH) { Write-Host 'EXE_PATH not set; will attempt to locate exe inside dist'; }
           powershell -ExecutionPolicy Bypass -File .\scripts\smoke_test.ps1 -ExePath "$env:EXE_PATH" -HealthUrl http://127.0.0.1:8742/health -Timeout 120

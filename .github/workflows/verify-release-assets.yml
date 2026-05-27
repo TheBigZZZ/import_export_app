@@ -55,6 +55,7 @@ jobs:
             const expected = [
               'TradeDeskERP.exe',
               'TradeDeskERP-Setup.exe',
+              'sbom.json',
               'updates.json'
             ];
 

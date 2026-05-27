@@ -11,6 +11,8 @@ permissions:
 jobs:
   release:
     runs-on: ubuntu-latest
+    outputs:
+      tag_name: ${{ steps.release_tag.outputs.tag_name }}
     steps:
       - name: Checkout
         uses: actions/checkout@v4
@@ -52,6 +54,7 @@ jobs:
           fi
 
       - name: "Fallback: create patch tag & release if semantic-release didn't publish"
+        id: fallback_release
         if: ${{ steps.semantic.outcome != 'success' || steps.detect_release.outputs.published != 'true' }}
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
@@ -81,6 +84,18 @@ jobs:
           curl -s -X POST -H "Authorization: token $GITHUB_TOKEN" -H "Accept: application/vnd.github+json" \
             https://api.github.com/repos/${GITHUB_REPOSITORY}/releases \
             -d "{\"tag_name\": \"$NEW_TAG\", \"name\": \"$NEW_TAG\", \"body\": \"Automated fallback release\"}"
+          echo "tag_name=$NEW_TAG" >> "$GITHUB_OUTPUT"
+
+      - name: Resolve release tag output
+        id: release_tag
+        shell: bash
+        run: |
+          TAG="${{ steps.detect_release.outputs.tag_name || steps.fallback_release.outputs.tag_name }}"
+          if [ -z "$TAG" ]; then
+            echo "No release tag was produced" >&2
+            exit 1
+          fi
+          echo "tag_name=$TAG" >> "$GITHUB_OUTPUT"
 
   build-and-upload-assets:
     needs: release
@@ -95,24 +110,10 @@ jobs:
       - name: Resolve release tag
         id: release_meta
         shell: pwsh
-        env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
-          $headers = @{
-            Authorization = "Bearer $env:GITHUB_TOKEN"
-            "X-GitHub-Api-Version" = "2022-11-28"
-            "User-Agent" = "copilot"
-          }
-          $repo = "${{ github.repository }}"
-          $release = Invoke-RestMethod -Headers $headers -Uri "https://api.github.com/repos/$repo/releases/latest"
-          $tag = $release.tag_name
-
+          $tag = "${{ needs.release.outputs.tag_name }}"
           if (-not $tag) {
-            $tag = (git tag --points-at HEAD | Select-Object -First 1)
-          }
-
-          if (-not $tag) {
-            throw "Unable to determine release tag"
+            throw "Unable to determine release tag from release job"
           }
 
           "tag_name=$tag" | Out-File -FilePath $env:GITHUB_OUTPUT -Append -Encoding utf8
