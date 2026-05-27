@@ -446,8 +446,9 @@ def main() -> int:
         # keep UI responsive if diagnostics flow fails
         pass
 
-    window = MainWindow(backend_url=backend_url)
-    # Check for updates (if configured) before showing main window
+    # Check for updates before creating the main window.
+    # This ensures the user gets the update prompt even if the currently
+    # installed build has a startup/login bug.
     try:
         from .update_checker import check_for_update
 
@@ -459,6 +460,8 @@ def main() -> int:
             pass
     except Exception:
         pass
+
+    window = MainWindow(backend_url=backend_url)
 
     window.show()
 
