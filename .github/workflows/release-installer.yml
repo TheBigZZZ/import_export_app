@@ -27,6 +27,7 @@ jobs:
           python -m pip install --upgrade pip
           # Use the packaging pinned requirements to ensure build-time deps are stable
           pip install -r packaging/requirements-pinned.txt
+          pip install cyclonedx-bom
           pip install pyinstaller==6.20.0
 
       - name: Build frontend executable (PyInstaller)
