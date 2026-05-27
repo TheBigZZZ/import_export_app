@@ -1,6 +1,9 @@
 name: Build and Publish Installer
 
 on:
+  workflow_run:
+    workflows: ["Semantic Release"]
+    types: [completed]
   release:
     types: [published]
   workflow_dispatch:
@@ -11,8 +14,35 @@ permissions:
 jobs:
   build-windows:
     runs-on: windows-latest
+    if: ${{ github.event_name != 'workflow_run' || github.event.workflow_run.conclusion == 'success' }}
     steps:
       - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.workflow_run.head_sha || github.sha }}
+
+      - name: Resolve release tag
+        id: release_meta
+        shell: pwsh
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          $tag = "${{ github.event.release.tag_name }}"
+          if (-not $tag) {
+            $headers = @{
+              Authorization = "Bearer $env:GITHUB_TOKEN"
+              "X-GitHub-Api-Version" = "2022-11-28"
+              "User-Agent" = "copilot"
+            }
+            $repo = "${{ github.repository }}"
+            $release = Invoke-RestMethod -Headers $headers -Uri "https://api.github.com/repos/$repo/releases/latest"
+            $tag = $release.tag_name
+          }
+
+          if (-not $tag) {
+            throw "Unable to determine release tag"
+          }
+
+          "tag_name=$tag" | Out-File -FilePath $env:GITHUB_OUTPUT -Append -Encoding utf8
 
       - name: Set up Python
         uses: actions/setup-python@v5
@@ -61,7 +91,7 @@ jobs:
       - name: Create manifest for updater (with checksum)
         shell: powershell
         run: |
-          $tag = "${{ github.ref_name }}"
+          $tag = "${{ steps.release_meta.outputs.tag_name }}"
           $installerName = "TradeDeskERP-Setup.exe"
           $installerPath = "dist\$installerName"
           $hash = (Get-FileHash -Path $installerPath -Algorithm SHA256).Hash.ToLower()
@@ -76,7 +106,7 @@ jobs:
       - name: Upload release assets
         uses: softprops/action-gh-release@v2
         with:
-          tag_name: ${{ github.event.release.tag_name || github.ref_name }}
+          tag_name: ${{ steps.release_meta.outputs.tag_name }}
           files: |
             dist/TradeDeskERP/TradeDeskERP.exe
             dist/TradeDeskERP-Setup.exe
