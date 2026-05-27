@@ -1,3 +1,10 @@
+# [1.1.0](https://github.com/TheBigZZZ/import_export_app/compare/v1.0.4...v1.1.0) (2026-05-27)
+
+
+### Features
+
+* implement automatic super-admin account creation and login pre-fill ([d1b9647](https://github.com/TheBigZZZ/import_export_app/commit/d1b964721dfe60ecabae9a6560e18b0f4afb2e23))
+
 # 1.0.0 (2026-05-27)
 
 
