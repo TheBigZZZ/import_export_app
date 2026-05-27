@@ -25,7 +25,9 @@ Name: "desktopicon"; Description: "Create a desktop icon"; GroupDescription: "Ad
 [Files]
 Source: "..\dist\TradeDeskERP\*"; DestDir: "{app}"; Flags: ignoreversion recursesubdirs createallsubdirs
 ; Include production .env template for operator configuration
+#if FileExists("..\.env.production.example")
 Source: "..\.env.production.example"; DestDir: "{app}"; Flags: ignoreversion
+#endif
 
 [Icons]
 Name: "{group}\TradeDesk ERP"; Filename: "{app}\{#MyAppExeName}"
