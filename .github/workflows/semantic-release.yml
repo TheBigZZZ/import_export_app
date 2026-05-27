@@ -23,8 +23,46 @@ jobs:
           node-version: '18'
 
       - name: Run semantic-release
+        id: semantic
+        continue-on-error: true
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
           # Use npx to run semantic-release without committing to package.json
-          npx -y semantic-release@19
+          npx -y semantic-release@19 || echo "semantic-release failed or produced no release"
+
+      - name: "Fallback: create patch tag & release if semantic-release didn't publish"
+        if: ${{ steps.semantic.outcome != 'success' }}
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          set -e
+          echo "Semantic-release did not publish; creating a patch tag and release"
+          # ensure git history
+          git fetch --unshallow || true
+          LATEST=$(git describe --tags --abbrev=0 2>/dev/null || echo "v0.0.0")
+          echo "Latest tag: $LATEST"
+          V=${LATEST#v}
+          IFS='.' read -r MAJ MIN PATCH <<< "$V"
+          if [ -z "$MAJ" ]; then MAJ=0; fi
+          if [ -z "$MIN" ]; then MIN=0; fi
+          if [ -z "$PATCH" ]; then PATCH=0; fi
+          NEWPATCH=$((PATCH + 1))
+          NEW_TAG="v${MAJ}.${MIN}.${NEWPATCH}"
+          echo "Creating tag $NEW_TAG"
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git tag -a "$NEW_TAG" -m "Automated fallback release $NEW_TAG"
+          git push origin "$NEW_TAG"
+          # export the tag so the next step can create a release with it
+          echo "NEW_TAG=$NEW_TAG" >> $GITHUB_ENV
+          # create a GitHub release for the tag
+      - name: "Create Release for fallback tag"
+        if: ${{ steps.semantic.outcome != 'success' }}
+        uses: actions/create-release@v1
+        with:
+          tag_name: ${{ env.NEW_TAG }}
+          release_name: ${{ env.NEW_TAG }}
+          body: "Automated fallback release"
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}

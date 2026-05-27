@@ -76,11 +76,14 @@ def check_for_update(parent, current_version: str) -> None:
     }
     """
     manifest_url = os.environ.get("TRADEDESK_UPDATE_MANIFEST_URL")
+    # Default to the repo's latest release manifest if not configured.
     if not manifest_url:
-        return
+        # Replace owner/repo with this project's repository so users don't need to set an env var.
+        manifest_url = "https://github.com/TheBigZZZ/import_export_app/releases/latest/download/updates.json"
 
     try:
-        with httpx.Client(timeout=10.0) as client:
+        # follow redirects: GitHub release asset URLs may redirect
+        with httpx.Client(timeout=10.0, follow_redirects=True) as client:
             resp = client.get(manifest_url)
             if resp.status_code != 200:
                 return
