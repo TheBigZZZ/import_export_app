@@ -22,6 +22,12 @@ jobs:
         with:
           node-version: '18'
 
+      - name: Install semantic-release and plugins
+        run: |
+          # Ensure npm metadata exists (no-op if package.json already present)
+          node -e "process.exit(0)"
+          npm install --no-audit --no-fund semantic-release@19 @semantic-release/commit-analyzer @semantic-release/release-notes-generator @semantic-release/changelog @semantic-release/npm @semantic-release/git @semantic-release/github
+
       - name: Run semantic-release
         id: semantic
         continue-on-error: true
