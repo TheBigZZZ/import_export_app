@@ -5,6 +5,9 @@ on:
     types: [published]
   workflow_dispatch:
 
+permissions:
+  contents: write
+
 jobs:
   build-windows:
     runs-on: windows-latest
@@ -55,52 +58,14 @@ jobs:
           }
           $manifest | ConvertTo-Json -Depth 10 | Set-Content -Path updates.json -Encoding UTF8
 
-      - name: Create GitHub Release (from trigger)
-        id: create_release
-        uses: actions/create-release@v1
+      - name: Upload release assets
+        uses: softprops/action-gh-release@v2
         with:
-          tag_name: ${{ github.ref_name }}
-          release_name: ${{ github.ref_name }}
-          body: "Automated release artifacts"
-        env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-
-      - name: Upload EXE to release
-        uses: actions/upload-release-asset@v1
-        with:
-          upload_url: ${{ steps.create_release.outputs.upload_url }}
-          asset_path: dist/TradeDeskERP/TradeDeskERP.exe
-          asset_name: TradeDeskERP.exe
-          asset_content_type: application/octet-stream
-        env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-
-      - name: Upload Installer to release
-        uses: actions/upload-release-asset@v1
-        with:
-          upload_url: ${{ steps.create_release.outputs.upload_url }}
-          asset_path: dist/TradeDeskERP-Setup.exe
-          asset_name: TradeDeskERP-Setup.exe
-          asset_content_type: application/octet-stream
-        env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-
-      - name: Upload SBOM to release
-        uses: actions/upload-release-asset@v1
-        with:
-          upload_url: ${{ steps.create_release.outputs.upload_url }}
-          asset_path: sbom.json
-          asset_name: sbom.json
-          asset_content_type: application/json
-        env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-
-      - name: Upload updates manifest to release
-        uses: actions/upload-release-asset@v1
-        with:
-          upload_url: ${{ steps.create_release.outputs.upload_url }}
-          asset_path: updates.json
-          asset_name: updates.json
-          asset_content_type: application/json
+          tag_name: ${{ github.event.release.tag_name || github.ref_name }}
+          files: |
+            dist/TradeDeskERP/TradeDeskERP.exe
+            dist/TradeDeskERP-Setup.exe
+            sbom.json
+            updates.json
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
