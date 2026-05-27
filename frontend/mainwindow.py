@@ -85,47 +85,95 @@ class LoginDialog(QDialog):
         layout.addWidget(self.error)
         layout.addLayout(buttons)
 
-        def _show_setup_help(self) -> None:
-                dialog = QDialog(self)
-                dialog.setWindowTitle("TradeDesk Setup Guide")
-                dialog.setModal(True)
-                dialog.resize(720, 520)
+    def _show_setup_help(self) -> None:
+        dialog = SetupHelpDialog(self)
+        dialog.exec()
 
-                text = QTextBrowser(dialog)
-                text.setOpenExternalLinks(True)
-                text.setHtml(
-                        """
-                        <h2>Setup Options</h2>
-                        <p><b>Local mode</b>: this PC starts its own backend on <code>127.0.0.1:8742</code>.</p>
-                        <p><b>LAN mode</b>: one office PC runs the backend and everyone uses that PC's LAN IP.</p>
-                        <p><b>Online tunnel</b>: a tunnel service gives the host PC a public HTTPS URL that other devices can use.</p>
-                        <p><b>Public host</b>: a VPS or cloud host runs the backend and exposes a public URL directly.</p>
-                        <h3>Recommended free options</h3>
-                        <ol>
-                            <li>LAN host on one always-on office PC.</li>
-                            <li>Free tunnel from that PC if you need internet access.</li>
-                        </ol>
-                        <h3>What to enter in this app</h3>
-                        <ul>
-                            <li>Local mode: keep the default localhost address.</li>
-                            <li>LAN mode: enter the host PC's LAN IP address and port.</li>
-                            <li>Online tunnel: enter the public HTTPS URL from the tunnel or host.</li>
-                        </ul>
-                        <p>The app remembers the chosen backend URL on this computer unless you turn that off.</p>
-                        """
-                )
 
-                close_button = QPushButton("Close", dialog)
-                close_button.clicked.connect(dialog.accept)
+class SetupHelpDialog(QDialog):
+    def __init__(self, parent=None):
+        super().__init__(parent)
+        self.setWindowTitle("TradeDesk Setup Guide")
+        self.setModal(True)
+        self.resize(780, 640)
 
-                layout = QVBoxLayout(dialog)
-                layout.addWidget(text)
-                footer = QHBoxLayout()
-                footer.addStretch(1)
-                footer.addWidget(close_button)
-                layout.addLayout(footer)
+        text = QTextBrowser(self)
+        text.setOpenExternalLinks(True)
+        text.setHtml(
+            """
+            <h2>Recommended setup for nontechnical users</h2>
+            <p><b>Best simple choice:</b> use <a href="https://tailscale.com/download">Tailscale</a> on the host PC and on every client PC. It removes the need for port forwarding, firewall changes, or manual LAN configuration.</p>
+            <p><b>If you need access from outside the office:</b> use <a href="https://developers.cloudflare.com/cloudflare-one/connections/connect-networks/get-started/create-remote-tunnel/">Cloudflare Tunnel</a> or a similar HTTPS tunnel on the host.</p>
 
-                dialog.exec()
+            <h3>Option A - Local setup on one PC</h3>
+            <ol>
+                <li>Install TradeDesk on the PC you want to use as the main machine.</li>
+                <li>Open the app and click <b>Use Local Backend</b>.</li>
+                <li>Leave the URL as <code>http://127.0.0.1:8742</code>.</li>
+                <li>Log in with the admin account.</li>
+                <li>Keep this app open; it will start and use the local backend automatically.</li>
+            </ol>
+
+            <h3>Option B - Shared setup using Tailscale</h3>
+            <ol>
+                <li>Pick one always-on PC to act as the host.</li>
+                <li>Install TradeDesk on the host PC and open it once.</li>
+                <li>On the host PC, click <b>Use Local Backend</b>.</li>
+                <li>Install Tailscale on the host PC from <a href="https://tailscale.com/download">tailscale.com/download</a>.</li>
+                <li>Sign in to Tailscale on the host PC.</li>
+                <li>Install Tailscale on every client PC and sign in with the same account or invite the users.</li>
+                <li>Find the host PC's Tailscale IP address, usually a <code>100.x.x.x</code> address.</li>
+                <li>On every other PC, open TradeDesk and choose <b>Use Shared Backend</b>.</li>
+                <li>Enter the host Tailscale URL exactly, for example <code>http://100.101.102.103:8742</code>.</li>
+                <li>Leave <b>Remember this connection</b> checked if you want each PC to keep the setting.</li>
+                <li>Log in normally on each client.</li>
+            </ol>
+
+            <h3>Option C - Shared setup with a public HTTPS URL</h3>
+            <ol>
+                <li>Run the backend on a server or always-on machine.</li>
+                <li>Expose it through Cloudflare Tunnel or another public HTTPS tunnel.</li>
+                <li>On each client, choose <b>Use Shared Backend</b>.</li>
+                <li>Enter the public HTTPS URL exactly, such as <code>https://trade.example.com</code>.</li>
+                <li>Log in after the connection is saved.</li>
+            </ol>
+
+            <h3>What to type in the URL field</h3>
+            <ul>
+                <li><b>Local:</b> <code>http://127.0.0.1:8742</code></li>
+                <li><b>Tailscale host:</b> <code>http://100.x.x.x:8742</code></li>
+                <li><b>Public host/tunnel:</b> <code>https://...</code></li>
+            </ul>
+
+            <h3>Recommended free path</h3>
+            <ol>
+                <li>Use one office PC as the host.</li>
+                <li>Install Tailscale on the host and on every client.</li>
+                <li>Point the clients to the host's Tailscale IP.</li>
+            </ol>
+
+            <h3>Quick start checklist</h3>
+            <ol>
+                <li>Host PC: install TradeDesk, click <b>Use Local Backend</b>, and log in once.</li>
+                <li>Host PC: install Tailscale and sign in.</li>
+                <li>Client PCs: install Tailscale and sign in.</li>
+                <li>Client PCs: open TradeDesk, choose <b>Use Shared Backend</b>, and paste the host Tailscale URL.</li>
+                <li>Test the setup by editing data on one PC and confirming another PC refreshes.</li>
+            </ol>
+
+            <p>If you need internet access outside the office, use Cloudflare Tunnel instead of LAN or Tailscale.</p>
+            """
+        )
+
+        close_button = QPushButton("Close")
+        close_button.clicked.connect(self.accept)
+
+        layout = QVBoxLayout(self)
+        layout.addWidget(text)
+        footer = QHBoxLayout()
+        footer.addStretch(1)
+        footer.addWidget(close_button)
+        layout.addLayout(footer)
 
 
 class MainWindow(QMainWindow):

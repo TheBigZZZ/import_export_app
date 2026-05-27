@@ -85,21 +85,27 @@ To reset a user's password via the CLI:
 python -m tradedesk.backend.cli --reset-admin-password --target-username admin --admin-password "NewP@ssw0rd"
 ```
 
-Live/shared deployment:
+Recommended setup for nontechnical users:
 
-- Set `TRADEDESK_BACKEND_URL` on each desktop client to point at the shared backend, for example `http://192.168.1.50:8742`.
-- Set `TRADEDESK_DATABASE_URL` on the backend to point at your shared database if you want to run outside the default SQLite file.
+1. Use one always-on host PC.
+2. Install TradeDesk on the host PC and choose `Use Local Backend` the first time it opens.
+3. Install [Tailscale](https://tailscale.com/download) on the host PC and on every client PC.
+4. Sign in to Tailscale on every machine.
+5. Use the host PC's Tailscale IP address, usually a `100.x.x.x` address, as the backend URL on client PCs.
+6. On each client PC, open TradeDesk and choose `Use Shared Backend`.
+7. Enter `http://100.x.x.x:8742` using the host PC's actual Tailscale IP.
+8. Leave the connection saved on each client.
+9. Test the setup by changing data on one PC and confirming the other PC refreshes automatically.
+
+If you need access from outside the office, use [Cloudflare Tunnel](https://developers.cloudflare.com/cloudflare-one/connections/connect-networks/get-started/create-remote-tunnel/) or another HTTPS tunnel on the host PC and enter the public `https://` URL instead of the Tailscale address.
+
+Live/shared deployment details:
+
+- Set `TRADEDESK_BACKEND_URL` on each desktop client to point at the shared backend if you want to configure it by environment variable instead of the in-app dialog.
+- Set `TRADEDESK_DATABASE_URL` on the backend to point at a shared database if you want a non-SQLite deployment.
 - Leave `TRADEDESK_BACKEND_URL` unset for local single-user development; the desktop app will start its own backend on `127.0.0.1:8742`.
 - The first desktop launch shows a connection setup dialog if no client setting exists yet. It stores the chosen backend URL in `~/TradeDesk/client-settings.json`.
 - Reopen the dialog later with `--configure-connection` or `TRADEDESK_CONFIGURE_CONNECTION=1`.
-
-Zero-cost shared setup:
-
-1. Pick one always-on machine to act as the backend host.
-2. Start the backend on that machine and allow port `8742` through the firewall.
-3. Find the host machine's LAN IP address, then use that IP in `TRADEDESK_BACKEND_URL` on every other desktop.
-4. Keep the database on the host machine for now if you want the simplest no-cost deployment; every client still shares the same data because they all talk to the same backend.
-5. Open two clients, make a change in one, and verify the other refreshes automatically through live sync.
 
 ## Run Tests
 
