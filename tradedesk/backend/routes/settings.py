@@ -1,6 +1,7 @@
 from fastapi import APIRouter, Depends, status
 
 from ..dependencies import require_roles
+from ..live import LiveEvent, broadcast_live_event
 from ..schemas.settings import (
 	AppSettingsRead,
 	AppSettingsUpdate,
@@ -30,6 +31,13 @@ async def update_app_settings(
 	_: object = Depends(require_roles("super_admin", "admin")),
 ) -> AppSettingsRead:
 	updated = SettingsService().update_settings(payload.model_dump())
+	broadcast_live_event(
+		LiveEvent(
+			event_type="entity.changed",
+			table_name="settings",
+			action="update",
+		)
+	)
 	return AppSettingsRead.model_validate(updated)
 
 
@@ -70,6 +78,13 @@ async def restore_backup(
 	_: object = Depends(require_roles("super_admin", "admin")),
 ) -> RestoreBackupResponse:
 	restored = await SettingsService().restore_backup(payload.file_name)
+	broadcast_live_event(
+		LiveEvent(
+			event_type="entity.changed",
+			table_name="database",
+			action="restore",
+		)
+	)
 	return RestoreBackupResponse(
 		restored_backup=BackupInfo(
 			file_name=restored.file_name,

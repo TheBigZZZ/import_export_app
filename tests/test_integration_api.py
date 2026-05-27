@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import asyncio
 from decimal import Decimal
 from pathlib import Path
 
@@ -13,6 +14,7 @@ import os
 from tradedesk.backend.bootstrap import DEFAULT_ACCOUNTS
 from tradedesk.backend.config import settings
 from tradedesk.backend.database import Base, get_db
+from tradedesk.backend.live import LiveEvent, broker, broadcast_live_event
 from tradedesk.backend.main import app
 from tradedesk.backend.models.account import ChartOfAccount
 from tradedesk.backend.models.user import User
@@ -291,3 +293,33 @@ async def test_negative_stock_guard_obeys_settings(integration_client: httpx.Asy
     )
     assert expense_response.status_code == 201
     assert expense_response.json()["voucher_no"].startswith("CPV-")
+
+
+@pytest.mark.asyncio
+async def test_live_broker_delivers_change_events() -> None:
+    queue = await broker.subscribe()
+    try:
+        broadcast_live_event(
+            LiveEvent(
+                event_type="entity.changed",
+                table_name="customers",
+                action="insert",
+                record_id=123,
+                user_id=1,
+            )
+        )
+
+        event = await asyncio.wait_for(queue.get(), timeout=5.0)
+        assert event is not None
+        assert event.event_type == "entity.changed"
+        assert event.table_name == "customers"
+        assert event.action == "insert"
+        assert event.record_id == 123
+    finally:
+        await broker.unsubscribe(queue)
+
+
+@pytest.mark.asyncio
+async def test_live_events_endpoint_requires_auth(integration_client: httpx.AsyncClient) -> None:
+    response = await integration_client.get("/api/live/events")
+    assert response.status_code == 403

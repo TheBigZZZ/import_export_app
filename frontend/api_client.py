@@ -35,6 +35,9 @@ class ApiClient:
         token = keyring.get_password(SERVICE_NAME, TOKEN_KEY)
         return {"Authorization": f"Bearer {token}"} if token else {}
 
+    def auth_headers(self) -> dict[str, str]:
+        return self._auth_headers()
+
     async def post(self, path: str, json: dict[str, Any] | None = None, auth: bool = True) -> httpx.Response:
         headers = self._auth_headers() if auth else {}
         async with httpx.AsyncClient(base_url=self.base_url, timeout=30.0) as client:

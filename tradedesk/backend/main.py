@@ -38,6 +38,7 @@ from .routes import (
     purchases,
     reports,
     exchange_rates,
+    live,
     sales,
     settings as app_settings,
     suppliers,
@@ -208,6 +209,7 @@ app.include_router(expenses.router, prefix="/api/expenses", tags=["expenses"])
 app.include_router(reports.router, prefix="/api/reports", tags=["reports"])
 app.include_router(app_settings.router, prefix="/api/settings", tags=["settings"])
 app.include_router(exchange_rates.router, prefix="/api/exchange-rates", tags=["exchange-rates"])
+app.include_router(live.router, prefix="/api/live", tags=["live"])
 app.include_router(diagnostics_router, prefix="/diagnostics", tags=["diagnostics"])
 app.include_router(admin_router, prefix="/diagnostics/admin", tags=["diagnostics-admin"])
 

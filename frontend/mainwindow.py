@@ -5,7 +5,7 @@ import json
 from pathlib import Path
 from dataclasses import dataclass
 
-from PySide6.QtCore import Qt
+from PySide6.QtCore import QTimer, Qt
 from PySide6.QtWidgets import (
     QDialog,
     QFormLayout,
@@ -19,9 +19,11 @@ from PySide6.QtWidgets import (
     QStatusBar,
     QVBoxLayout,
     QWidget,
+    QTextBrowser,
 )
 
 from .api_client import ApiClient
+from .live_updates import LiveUpdateMonitor
 from .modules import (
     BanksModule,
     CashRegisterModule,
@@ -65,7 +67,12 @@ class LoginDialog(QDialog):
         self.error = QLabel("")
         self.error.setStyleSheet("color: #E53935;")
 
+        self.help_button = QPushButton("Setup Help")
+        self.help_button.clicked.connect(self._show_setup_help)
+
         buttons = QHBoxLayout()
+        buttons.addWidget(self.help_button)
+        buttons.addStretch(1)
         self.login_button = QPushButton("Login")
         self.cancel_button = QPushButton("Cancel")
         self.login_button.clicked.connect(self.accept)
@@ -78,6 +85,48 @@ class LoginDialog(QDialog):
         layout.addWidget(self.error)
         layout.addLayout(buttons)
 
+        def _show_setup_help(self) -> None:
+                dialog = QDialog(self)
+                dialog.setWindowTitle("TradeDesk Setup Guide")
+                dialog.setModal(True)
+                dialog.resize(720, 520)
+
+                text = QTextBrowser(dialog)
+                text.setOpenExternalLinks(True)
+                text.setHtml(
+                        """
+                        <h2>Setup Options</h2>
+                        <p><b>Local mode</b>: this PC starts its own backend on <code>127.0.0.1:8742</code>.</p>
+                        <p><b>LAN mode</b>: one office PC runs the backend and everyone uses that PC's LAN IP.</p>
+                        <p><b>Online tunnel</b>: a tunnel service gives the host PC a public HTTPS URL that other devices can use.</p>
+                        <p><b>Public host</b>: a VPS or cloud host runs the backend and exposes a public URL directly.</p>
+                        <h3>Recommended free options</h3>
+                        <ol>
+                            <li>LAN host on one always-on office PC.</li>
+                            <li>Free tunnel from that PC if you need internet access.</li>
+                        </ol>
+                        <h3>What to enter in this app</h3>
+                        <ul>
+                            <li>Local mode: keep the default localhost address.</li>
+                            <li>LAN mode: enter the host PC's LAN IP address and port.</li>
+                            <li>Online tunnel: enter the public HTTPS URL from the tunnel or host.</li>
+                        </ul>
+                        <p>The app remembers the chosen backend URL on this computer unless you turn that off.</p>
+                        """
+                )
+
+                close_button = QPushButton("Close", dialog)
+                close_button.clicked.connect(dialog.accept)
+
+                layout = QVBoxLayout(dialog)
+                layout.addWidget(text)
+                footer = QHBoxLayout()
+                footer.addStretch(1)
+                footer.addWidget(close_button)
+                layout.addLayout(footer)
+
+                dialog.exec()
+
 
 class MainWindow(QMainWindow):
     def __init__(self, backend_url: str):
@@ -86,6 +135,12 @@ class MainWindow(QMainWindow):
         self.resize(1400, 860)
 
         self.api_client = ApiClient(backend_url)
+        self.live_monitor: LiveUpdateMonitor | None = None
+        self.current_module_key = "dashboard"
+        self._pending_live_modules: set[str] = set()
+        self._live_refresh_timer = QTimer(self)
+        self._live_refresh_timer.setSingleShot(True)
+        self._live_refresh_timer.timeout.connect(self._apply_live_refresh)
 
         shell = QWidget()
         shell_layout = QVBoxLayout(shell)
@@ -100,6 +155,9 @@ class MainWindow(QMainWindow):
         self.logout_button.clicked.connect(self.logout)
         top_layout.addWidget(self.company_label)
         top_layout.addStretch(1)
+        self.connection_label = QLabel("Connection: unknown")
+        self.connection_label.setObjectName("mutedLabel")
+        top_layout.addWidget(self.connection_label)
         top_layout.addWidget(self.user_label)
         top_layout.addWidget(self.logout_button)
 
@@ -129,6 +187,8 @@ class MainWindow(QMainWindow):
         status = QStatusBar()
         status.showMessage("Backend connected")
         self.setStatusBar(status)
+
+        self._update_connection_indicator()
 
         self.ensure_login()
 
@@ -170,6 +230,7 @@ class MainWindow(QMainWindow):
         self.sidebar_layout.addStretch(1)
 
     def switch_module(self, key: str) -> None:
+        self.current_module_key = key
         for name, button in self.module_buttons.items():
             button.setChecked(name == key)
 
@@ -248,11 +309,109 @@ class MainWindow(QMainWindow):
             if btn:
                 btn.hide()
 
+        self._start_live_monitor()
+
+    def _start_live_monitor(self) -> None:
+        self._stop_live_monitor()
+        self.live_monitor = LiveUpdateMonitor(self.api_client)
+        self.live_monitor.connected.connect(self._on_live_connected)
+        self.live_monitor.disconnected.connect(self._on_live_disconnected)
+        self.live_monitor.event_received.connect(self._on_live_event)
+        self.live_monitor.start()
+
+    def _stop_live_monitor(self) -> None:
+        if self.live_monitor is not None:
+            self.live_monitor.stop()
+            self.live_monitor = None
+
+    def _on_live_connected(self) -> None:
+        self.statusBar().showMessage("Live sync connected", 3000)
+        self._update_connection_indicator(connected=True)
+
+    def _on_live_disconnected(self, message: str) -> None:
+        if message:
+            self.statusBar().showMessage(f"Live sync reconnecting: {message}", 5000)
+        self._update_connection_indicator(connected=False)
+
+    def _update_connection_indicator(self, connected: bool = True) -> None:
+        backend_url = self.api_client.base_url
+        if backend_url.startswith("http://127.0.0.1") or backend_url.startswith("http://localhost"):
+            mode = "Local"
+        else:
+            mode = "Shared"
+
+        state = "Connected" if connected else "Reconnecting"
+        self.connection_label.setText(f"Connection: {mode} {state} ({backend_url})")
+
+    def _modules_for_live_event(self, payload: dict) -> set[str]:
+        table_name = str(payload.get("payload", {}).get("table_name") or "").lower()
+        modules = {"dashboard", "reports", self.current_module_key}
+        if not table_name:
+            return modules
+
+        if "database" in table_name or "system" in table_name:
+            return set(self.module_widgets.keys()) | {"dashboard", "reports"}
+
+        if "user" in table_name:
+            modules.add("users")
+        if any(token in table_name for token in ("account", "transaction", "voucher", "bank", "cash")):
+            modules.update({"accounts", "banks", "cash", "vouchers"})
+        if "customer" in table_name:
+            modules.add("customers")
+        if "supplier" in table_name:
+            modules.add("suppliers")
+        if any(token in table_name for token in ("product", "stock", "inventory")):
+            modules.update({"products", "imports"})
+        if "import" in table_name:
+            modules.update({"imports", "products"})
+        if "sale" in table_name:
+            modules.update({"sales", "customers", "products"})
+        if "purchase" in table_name:
+            modules.update({"purchases", "suppliers", "products"})
+        if "expense" in table_name:
+            modules.add("expenses")
+
+        return modules
+
+    def _on_live_event(self, payload: dict) -> None:
+        event_name = payload.get("event_name")
+        if event_name == "ready":
+            return
+
+        modules = self._modules_for_live_event(payload)
+        self._pending_live_modules.update(modules)
+        if not self._live_refresh_timer.isActive():
+            self._live_refresh_timer.start(250)
+
+    def _safe_refresh_widget(self, widget: QWidget) -> None:
+        refresh = getattr(widget, "refresh", None)
+        if callable(refresh):
+            try:
+                refresh()
+            except Exception:
+                pass
+
+    def _apply_live_refresh(self) -> None:
+        modules = set(self._pending_live_modules)
+        self._pending_live_modules.clear()
+
+        for key in sorted(modules):
+            widget = self.module_widgets.get(key)
+            if widget is not None:
+                self._safe_refresh_widget(widget)
+
+        current_widget = self.stack.currentWidget()
+        if current_widget is not None:
+            self._safe_refresh_widget(current_widget)
+
     def logout(self) -> None:
+        self._stop_live_monitor()
         self.api_client.clear_tokens()
         self.user_label.setText("Not logged in")
+        self._update_connection_indicator(connected=False)
         self.ensure_login()
 
     def closeEvent(self, event):
+        self._stop_live_monitor()
         self.api_client.close()
         super().closeEvent(event)

@@ -36,6 +36,7 @@ class Settings(BaseSettings):
     logs_dir: Path = Field(default_factory=lambda: Path.home() / "TradeDesk" / "logs")
 
     db_file_name: str = "tradedesk.db"
+    database_url: str | None = None
 
     jwt_secret_key: str = "change-me-in-production"
     jwt_algorithm: str = "HS256"
@@ -101,7 +102,25 @@ class Settings(BaseSettings):
 
     @property
     def async_database_url(self) -> str:
+        if self.database_url:
+            url = self.database_url.strip()
+            if url.startswith("sqlite:///"):
+                return url.replace("sqlite:///", "sqlite+aiosqlite:///", 1)
+            if url.startswith("postgresql://"):
+                return url.replace("postgresql://", "postgresql+asyncpg://", 1)
+            if url.startswith("postgres://"):
+                return url.replace("postgres://", "postgresql+asyncpg://", 1)
+            return url
         return f"sqlite+aiosqlite:///{self.db_path.as_posix()}"
+
+    @property
+    def sync_database_url(self) -> str:
+        url = self.async_database_url
+        if "+aiosqlite" in url:
+            return url.replace("+aiosqlite", "", 1)
+        if "+asyncpg" in url:
+            return url.replace("+asyncpg", "", 1)
+        return url
 
 
 settings = Settings()

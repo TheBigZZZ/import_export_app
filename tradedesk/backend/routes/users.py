@@ -14,7 +14,7 @@ router = APIRouter()
 @router.get("", response_model=UserListResponse)
 async def list_users(
     db: AsyncSession = Depends(get_db),
-    _=Depends(require_roles("super_admin", "admin")),
+    _=Depends(require_roles("super_admin")),
 ) -> UserListResponse:
     # Honor enable_user_module flag
     from ..config import settings
@@ -49,7 +49,7 @@ async def create_user(
 async def get_user(
     user_id: int,
     db: AsyncSession = Depends(get_db),
-    _=Depends(require_roles("super_admin", "admin")),
+    _=Depends(require_roles("super_admin")),
 ) -> UserRead:
     from ..config import settings
     if not settings.enable_user_module:
@@ -65,7 +65,7 @@ async def update_user(
     user_id: int,
     payload: UserUpdate,
     db: AsyncSession = Depends(get_db),
-    _=Depends(require_roles("super_admin", "admin")),
+    _=Depends(require_roles("super_admin")),
 ) -> UserRead:
     from ..config import settings
     if not settings.enable_user_module:
@@ -82,7 +82,7 @@ async def update_user(
 async def deactivate_user(
     user_id: int,
     db: AsyncSession = Depends(get_db),
-    _=Depends(require_roles("super_admin", "admin")),
+    _=Depends(require_roles("super_admin")),
 ) -> None:
     from ..config import settings
     if not settings.enable_user_module:
@@ -99,7 +99,7 @@ async def deactivate_user(
 async def bulk_delete_users(
     payload: list[int],
     db: AsyncSession = Depends(get_db),
-    _: object = Depends(require_roles("super_admin", "admin")),
+    _: object = Depends(require_roles("super_admin")),
 ) -> dict:
     service = UserService(db)
     failed = await service.bulk_delete_users(payload)
@@ -109,12 +109,14 @@ async def bulk_delete_users(
 
 
 @router.get('/count')
-async def user_count(db: AsyncSession = Depends(get_db)) -> dict:
-    """Return the current user count. Requires admin role."""
+async def user_count(
+    db: AsyncSession = Depends(get_db),
+    _: object = Depends(require_roles("super_admin")),
+) -> dict:
+    """Return the current user count for super-admin dashboards."""
     from ..config import settings
     if not settings.enable_user_module:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="User module disabled")
-    _ = Depends(require_roles("super_admin", "admin"))
     stmt = select(User)
     result = await db.execute(stmt)
     count = len(result.scalars().all())

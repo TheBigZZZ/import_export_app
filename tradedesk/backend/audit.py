@@ -7,6 +7,8 @@ from enum import Enum
 
 from sqlalchemy import event, inspect
 
+from .live import LiveEvent, broadcast_live_event
+
 from .models import (
     BankAccount,
     ChartOfAccount,
@@ -91,18 +93,52 @@ def _insert_audit(connection, action_type: str, target, old_value: dict | None, 
 
 def _after_insert(mapper, connection, target) -> None:
     _insert_audit(connection, "insert", target, old_value=None, new_value=_snapshot(target))
+    broadcast_live_event(
+        LiveEvent(
+            event_type="entity.changed",
+            table_name=target.__tablename__,
+            action="insert",
+            record_id=getattr(target, "id", None),
+            user_id=getattr(target, "created_by", None),
+        )
+    )
 
 
 def _after_update(mapper, connection, target) -> None:
     _insert_audit(connection, "update", target, old_value=_old_snapshot(target), new_value=_snapshot(target))
+    broadcast_live_event(
+        LiveEvent(
+            event_type="entity.changed",
+            table_name=target.__tablename__,
+            action="update",
+            record_id=getattr(target, "id", None),
+            user_id=getattr(target, "created_by", None),
+        )
+    )
 
 
 def _after_delete(mapper, connection, target) -> None:
     _insert_audit(connection, "delete", target, old_value=_snapshot(target), new_value=None)
+    broadcast_live_event(
+        LiveEvent(
+            event_type="entity.changed",
+            table_name=target.__tablename__,
+            action="delete",
+            record_id=getattr(target, "id", None),
+            user_id=getattr(target, "created_by", None),
+        )
+    )
 
 
 def register_audit_listeners() -> None:
+    if getattr(register_audit_listeners, "_registered", False):
+        return
     for model in AUDITED_MODELS:
         event.listen(model, "after_insert", _after_insert)
         event.listen(model, "after_update", _after_update)
         event.listen(model, "after_delete", _after_delete)
+
+    register_audit_listeners._registered = True
+
+
+register_audit_listeners()

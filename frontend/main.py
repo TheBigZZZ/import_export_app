@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import argparse
 import os
 import subprocess
 import sys
@@ -11,16 +12,154 @@ from datetime import datetime, timezone
 
 import httpx
 from PySide6.QtCore import Qt
-from PySide6.QtWidgets import QApplication, QMessageBox, QInputDialog
+from PySide6.QtWidgets import QApplication, QCheckBox, QDialog, QFormLayout, QHBoxLayout, QInputDialog, QLabel, QLineEdit, QMessageBox, QPushButton, QTextBrowser, QVBoxLayout
 
 try:
     from .mainwindow import MainWindow
+    from .connection_settings import ConnectionSettings, clear_connection_settings, load_connection_settings, save_connection_settings
 except ImportError:
     from frontend.mainwindow import MainWindow
+    from frontend.connection_settings import ConnectionSettings, clear_connection_settings, load_connection_settings, save_connection_settings
 
 BACKEND_PORT = 8742
 BACKEND_STARTUP_TIMEOUT_SECONDS = 90
 BACKEND_STARTUP_POLL_INTERVAL_SECONDS = 0.5
+
+
+def _resolve_backend_target() -> tuple[str, bool, bool]:
+    parser = argparse.ArgumentParser(add_help=False)
+    parser.add_argument("--backend-url")
+    parser.add_argument("--configure-connection", action="store_true")
+    args, _ = parser.parse_known_args(sys.argv[1:])
+
+    backend_url = (args.backend_url or os.environ.get("TRADEDESK_BACKEND_URL") or "").strip()
+    if backend_url:
+        if "://" not in backend_url:
+            backend_url = f"http://{backend_url}"
+        return backend_url.rstrip("/"), False, False
+
+    stored = load_connection_settings()
+    if stored and not args.configure_connection and not os.environ.get("TRADEDESK_CONFIGURE_CONNECTION"):
+        backend_url = stored.backend_url.strip()
+        if backend_url:
+            if "://" not in backend_url:
+                backend_url = f"http://{backend_url}"
+            is_local = backend_url.startswith("http://127.0.0.1") or backend_url.startswith("http://localhost")
+            return backend_url.rstrip("/"), is_local, False
+
+    return f"http://127.0.0.1:{BACKEND_PORT}", True, True
+
+
+class ConnectionSetupDialog(QDialog):
+    def __init__(self, initial_backend_url: str, parent=None):
+        super().__init__(parent)
+        self.setWindowTitle("TradeDesk Connection Setup")
+        self.setModal(True)
+
+        intro = QLabel(
+            "Choose how this desktop connects to TradeDesk. Local mode starts a backend on this PC. Shared mode points all PCs to one backend host on your network."
+        )
+        intro.setWordWrap(True)
+
+        guidance = QLabel(
+            "For a free shared setup, keep one office PC always on, run the backend there, and enter that machine's LAN IP address here."
+        )
+        guidance.setWordWrap(True)
+        guidance.setObjectName("mutedLabel")
+
+        self.backend_url = QLineEdit(initial_backend_url)
+        self.backend_url.setPlaceholderText("http://127.0.0.1:8742 or http://192.168.1.50:8742")
+        self.remember = QCheckBox("Remember this connection on this PC")
+        self.remember.setChecked(True)
+
+        self.help_button = QPushButton("Setup Help")
+        self.help_button.clicked.connect(self._show_help)
+
+        self.local_button = QPushButton("Use Local Backend")
+        self.local_button.clicked.connect(self._use_local)
+        self.shared_button = QPushButton("Use Shared Backend")
+        self.shared_button.clicked.connect(self._accept_shared)
+        self.cancel_button = QPushButton("Cancel")
+        self.cancel_button.clicked.connect(self.reject)
+
+        buttons = QHBoxLayout()
+        buttons.addWidget(self.help_button)
+        buttons.addStretch(1)
+        buttons.addWidget(self.local_button)
+        buttons.addWidget(self.shared_button)
+        buttons.addWidget(self.cancel_button)
+
+        form = QFormLayout()
+        form.addRow("Backend URL", self.backend_url)
+        form.addRow("", self.remember)
+
+        layout = QVBoxLayout(self)
+        layout.addWidget(intro)
+        layout.addWidget(guidance)
+        layout.addLayout(form)
+        layout.addLayout(buttons)
+
+    def _show_help(self) -> None:
+        dialog = SetupHelpDialog(self)
+        dialog.exec()
+
+    def _use_local(self) -> None:
+        self.backend_url.setText(f"http://127.0.0.1:{BACKEND_PORT}")
+        self.accept()
+
+    def _accept_shared(self) -> None:
+        if not self.backend_url.text().strip():
+            QMessageBox.warning(self, "Connection Setup", "Enter a backend URL first, or choose Use Local Backend.")
+            return
+        self.accept()
+
+    def selected_settings(self) -> ConnectionSettings:
+        backend_url = self.backend_url.text().strip()
+        if "//" not in backend_url:
+            backend_url = f"http://{backend_url}"
+        return ConnectionSettings(backend_url=backend_url.rstrip("/"), remember=self.remember.isChecked())
+
+
+class SetupHelpDialog(QDialog):
+        def __init__(self, parent=None):
+                super().__init__(parent)
+                self.setWindowTitle("TradeDesk Setup Guide")
+                self.setModal(True)
+                self.resize(720, 520)
+
+                text = QTextBrowser()
+                text.setOpenExternalLinks(True)
+                text.setHtml(
+                        """
+                        <h2>Setup Options</h2>
+                        <p><b>Local mode</b>: this PC starts its own backend on <code>127.0.0.1:8742</code>. Use this for single-machine testing.</p>
+                        <p><b>LAN mode</b>: one office PC runs the backend and every client uses that PC's LAN IP, for example <code>http://192.168.1.50:8742</code>.</p>
+                        <p><b>Online tunnel</b>: a tunnel service gives the host machine a public HTTPS URL. Every client uses that HTTPS URL instead of a LAN address.</p>
+                        <p><b>Public host</b>: a VPS or cloud host runs the backend and exposes a public URL directly.</p>
+                        <h3>Recommended free options</h3>
+                        <ol>
+                            <li>LAN host on one always-on office PC.</li>
+                            <li>Free tunnel from that PC if you need internet access.</li>
+                        </ol>
+                        <h3>What to enter in this app</h3>
+                        <ul>
+                            <li>Local mode: leave the default localhost address.</li>
+                            <li>LAN mode: enter the host PC's LAN IP address and port.</li>
+                            <li>Online tunnel: enter the public HTTPS URL from the tunnel or host.</li>
+                        </ul>
+                        <p>The app remembers the chosen backend URL on this computer unless you turn that off.</p>
+                        """
+                )
+
+                buttons = QHBoxLayout()
+                close_button = QPushButton("Close")
+                close_button.clicked.connect(self.accept)
+                buttons.addStretch(1)
+                buttons.addWidget(close_button)
+
+                layout = QVBoxLayout(self)
+                layout.addWidget(text)
+                layout.addLayout(buttons)
 
 
 def _run_backend_server() -> None:
@@ -104,6 +243,17 @@ def start_backend(project_root: Path) -> Any:
     raise RuntimeError("Backend failed to start")
 
 
+def wait_for_backend(backend_url: str) -> None:
+    for _ in range(int(BACKEND_STARTUP_TIMEOUT_SECONDS / BACKEND_STARTUP_POLL_INTERVAL_SECONDS)):
+        try:
+            httpx.get(f"{backend_url}/health", timeout=1.0)
+            return
+        except Exception:
+            time.sleep(BACKEND_STARTUP_POLL_INTERVAL_SECONDS)
+
+    raise RuntimeError(f"Backend not reachable at {backend_url}")
+
+
 def stop_backend(proc: Any) -> None:
     proc.terminate()
     if hasattr(proc, "wait"):
@@ -124,9 +274,32 @@ def main() -> int:
     else:
         project_root = Path(__file__).resolve().parents[1]
 
-    backend_proc = start_backend(project_root)
-
     app = QApplication(sys.argv)
+
+    backend_url, should_start_local, should_prompt = _resolve_backend_target()
+
+    if should_prompt or os.environ.get("TRADEDESK_CONFIGURE_CONNECTION") or "--configure-connection" in sys.argv[1:]:
+        dialog = ConnectionSetupDialog(backend_url)
+        if dialog.exec() == QDialog.Accepted:
+            chosen = dialog.selected_settings()
+            backend_url = chosen.backend_url
+            should_start_local = backend_url.startswith("http://127.0.0.1") or backend_url.startswith("http://localhost")
+            if chosen.remember:
+                save_connection_settings(chosen)
+            else:
+                clear_connection_settings()
+        else:
+            return 0
+
+    backend_proc = start_backend(project_root) if should_start_local else None
+
+    if not should_start_local:
+        try:
+            wait_for_backend(backend_url)
+        except Exception as exc:
+            QMessageBox.critical(None, "Backend Unavailable", str(exc))
+            return 1
+
     load_styles(app, project_root)
 
     # If a diagnostic traceback file exists from a previous run, offer the
@@ -222,7 +395,7 @@ def main() -> int:
         # keep UI responsive if diagnostics flow fails
         pass
 
-    window = MainWindow(backend_url=f"http://127.0.0.1:{BACKEND_PORT}")
+    window = MainWindow(backend_url=backend_url)
     # Check for updates (if configured) before showing main window
     try:
         from .update_checker import check_for_update
@@ -239,7 +412,8 @@ def main() -> int:
     window.show()
 
     exit_code = app.exec()
-    stop_backend(backend_proc)
+    if backend_proc is not None:
+        stop_backend(backend_proc)
     return exit_code
 
 

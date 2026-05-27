@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 
-from sqlalchemy import text
+from sqlalchemy import inspect
 
 from .config import settings
 from .database import Base, engine
@@ -82,14 +82,8 @@ def _snapshot_from_settings() -> StartupConfigSnapshot:
 
 async def ensure_database_schema_ready() -> bool:
     async with engine.connect() as conn:
-        missing: list[str] = []
-        for table_name in REQUIRED_TABLES:
-            row = await conn.execute(
-                text("SELECT name FROM sqlite_master WHERE type='table' AND name=:table_name"),
-                {"table_name": table_name},
-            )
-            if row.scalar_one_or_none() is None:
-                missing.append(table_name)
+        table_names = await conn.run_sync(lambda sync_conn: set(inspect(sync_conn).get_table_names()))
+        missing = [table_name for table_name in REQUIRED_TABLES if table_name not in table_names]
 
     # Do not auto-create schema when running in production. In production the
     # operator must run Alembic migrations explicitly (recommended) via the

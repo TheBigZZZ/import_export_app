@@ -1,12 +1,13 @@
 # TradeDesk ERP
 
-TradeDesk ERP is an offline-first desktop ERP for import, inventory, and accounting workflows.
+TradeDesk ERP is a desktop ERP that can run locally for development or connect to a shared live backend for multi-user use.
 
 ## Stack
 
-- Backend: FastAPI + SQLAlchemy (async) + SQLite + Alembic
+- Backend: FastAPI + SQLAlchemy (async) + SQLite for local/dev, with support for a shared database URL in live mode
 - Frontend: PySide6 desktop client
 - Auth: JWT with bcrypt password hashing
+- Live sync: Server-sent events from the backend to refresh open clients automatically
 - Reporting stack prepared with pandas, OpenPyXL, and ReportLab
 
 ## Current Status
@@ -66,9 +67,9 @@ cd ../..
 python -m frontend.main
 ```
 
-Default seeded admin credentials:
+Default first-run admin credentials:
 
-- On a fresh database, the app creates a local super-admin account automatically and stores its credentials in `~/TradeDesk/default-super-admin.json`
+- On a fresh database, the app creates a super-admin account automatically and stores its credentials in `~/TradeDesk/default-super-admin.json`
 - The login screen pre-fills those credentials on first launch, but you still have to click `Login`
 
 Create initial admin via CLI (recommended for installers)
@@ -84,7 +85,21 @@ To reset a user's password via the CLI:
 python -m tradedesk.backend.cli --reset-admin-password --target-username admin --admin-password "NewP@ssw0rd"
 ```
 
-Note: For security, this repository does not include any default or seeded credentials. Configure secrets using `.env` or your environment before running.
+Live/shared deployment:
+
+- Set `TRADEDESK_BACKEND_URL` on each desktop client to point at the shared backend, for example `http://192.168.1.50:8742`.
+- Set `TRADEDESK_DATABASE_URL` on the backend to point at your shared database if you want to run outside the default SQLite file.
+- Leave `TRADEDESK_BACKEND_URL` unset for local single-user development; the desktop app will start its own backend on `127.0.0.1:8742`.
+- The first desktop launch shows a connection setup dialog if no client setting exists yet. It stores the chosen backend URL in `~/TradeDesk/client-settings.json`.
+- Reopen the dialog later with `--configure-connection` or `TRADEDESK_CONFIGURE_CONNECTION=1`.
+
+Zero-cost shared setup:
+
+1. Pick one always-on machine to act as the backend host.
+2. Start the backend on that machine and allow port `8742` through the firewall.
+3. Find the host machine's LAN IP address, then use that IP in `TRADEDESK_BACKEND_URL` on every other desktop.
+4. Keep the database on the host machine for now if you want the simplest no-cost deployment; every client still shares the same data because they all talk to the same backend.
+5. Open two clients, make a change in one, and verify the other refreshes automatically through live sync.
 
 ## Run Tests
 
@@ -154,6 +169,7 @@ Expected outputs:
 - Keep `TRADEDESK_DEBUG=false` in production.
 - Keep `TRADEDESK_BCRYPT_ROUNDS>=12` in production.
 - Keep `TRADEDESK_ENFORCE_STARTUP_CHECKS=true` to verify required DB tables exist at startup.
+- For multi-user live mode, set `TRADEDESK_BACKEND_URL` on the desktop client and run one shared backend instance for everyone.
 
 ## Build Windows App (Phase 6)
 
