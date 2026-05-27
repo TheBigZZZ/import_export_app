@@ -28,7 +28,7 @@ async def list_users(
 async def create_user(
     payload: UserCreate,
     db: AsyncSession = Depends(get_db),
-    _=Depends(require_roles("super_admin", "admin")),
+    _=Depends(require_roles("super_admin")),
 ) -> UserRead:
     from ..config import settings
     if not settings.enable_user_module:

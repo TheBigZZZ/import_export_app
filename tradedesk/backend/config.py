@@ -96,6 +96,10 @@ class Settings(BaseSettings):
         return self.data_dir / self.db_file_name
 
     @property
+    def initial_super_admin_credentials_path(self) -> Path:
+        return self.base_dir / "default-super-admin.json"
+
+    @property
     def async_database_url(self) -> str:
         return f"sqlite+aiosqlite:///{self.db_path.as_posix()}"
 

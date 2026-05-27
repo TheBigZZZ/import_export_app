@@ -1,6 +1,8 @@
 from __future__ import annotations
 
 import asyncio
+import json
+from pathlib import Path
 from dataclasses import dataclass
 
 from PySide6.QtCore import Qt
@@ -179,6 +181,15 @@ class MainWindow(QMainWindow):
 
     def ensure_login(self) -> None:
         dialog = LoginDialog(self)
+        credentials_path = Path.home() / "TradeDesk" / "default-super-admin.json"
+        if credentials_path.exists():
+            try:
+                creds = json.loads(credentials_path.read_text(encoding="utf-8"))
+                dialog.username.setText(creds.get("username") or "")
+                dialog.password.setText(creds.get("password") or "")
+            except Exception:
+                pass
+
         if dialog.exec() != QDialog.Accepted:
             self.close()
             return
@@ -218,7 +229,7 @@ class MainWindow(QMainWindow):
         except Exception:
             self.user_role = None
 
-        # Hide users module if server disables it or if current role is viewer
+        # Hide the Users module unless the signed-in user is a super admin.
         try:
             # check server-side feature flag
             import requests
@@ -232,8 +243,7 @@ class MainWindow(QMainWindow):
         except Exception:
             enable_users = True
 
-        if not enable_users or (hasattr(self, 'user_role') and self.user_role == 'viewer'):
-            # remove/hide Users button
+        if not enable_users or getattr(self, 'user_role', None) != 'super_admin':
             btn = self.module_buttons.get('users')
             if btn:
                 btn.hide()

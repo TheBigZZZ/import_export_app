@@ -68,7 +68,8 @@ python -m frontend.main
 
 Default seeded admin credentials:
 
-- Username: (no default) — set up initial admin during install or create via CLI
+- On a fresh database, the app creates a local super-admin account automatically and stores its credentials in `~/TradeDesk/default-super-admin.json`
+- The login screen pre-fills those credentials on first launch, but you still have to click `Login`
 
 Create initial admin via CLI (recommended for installers)
 
