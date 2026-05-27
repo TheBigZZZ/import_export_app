@@ -1,8 +1,6 @@
 name: Build and publish Windows EXE
 
 on:
-  push:
-    tags: ['v*']
   workflow_dispatch: {}
 
 jobs:
@@ -96,13 +94,3 @@ jobs:
           path: |
             dist/TradeDeskERP/TradeDeskERP.exe
             dist/TradeDeskERP-Setup.exe
-
-      - name: Upload assets to release
-        uses: softprops/action-gh-release@v2
-        with:
-          tag_name: ${{ github.ref_name }}
-          files: |
-            dist/TradeDeskERP/TradeDeskERP.exe
-            dist/TradeDeskERP-Setup.exe
-        env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}

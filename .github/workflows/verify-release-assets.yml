@@ -3,6 +3,13 @@ name: Verify Release Assets
 on:
   release:
     types: [published]
+  workflow_run:
+    workflows:
+      - "Semantic Release"
+      - "Build and Publish Installer"
+      - "Build and publish Windows EXE"
+    types: [completed]
+  workflow_dispatch: {}
 
 permissions:
   contents: read
@@ -11,17 +18,36 @@ permissions:
 jobs:
   check-assets:
     runs-on: ubuntu-latest
+    if: ${{ github.event_name != 'workflow_run' || github.event.workflow_run.conclusion == 'success' }}
     steps:
+      - name: Resolve release tag
+        id: release_meta
+        uses: actions/github-script@v6
+        with:
+          github-token: ${{ secrets.GITHUB_TOKEN }}
+          script: |
+            const eventName = context.eventName;
+            if (eventName === 'release') {
+              core.setOutput('tag', context.payload.release.tag_name);
+              core.setOutput('releaseId', String(context.payload.release.id));
+              return;
+            }
+
+            const owner = context.repo.owner;
+            const repo = context.repo.repo;
+            const latest = await github.rest.repos.getLatestRelease({ owner, repo });
+            core.setOutput('tag', latest.data.tag_name);
+            core.setOutput('releaseId', String(latest.data.id));
+
       - name: Verify release assets
         uses: actions/github-script@v6
         with:
           github-token: ${{ secrets.GITHUB_TOKEN }}
           script: |
-            const release = context.payload.release;
             const owner = context.repo.owner;
             const repo = context.repo.repo;
-            const releaseId = release.id;
-            const tag = release.tag_name;
+            const releaseId = Number('${{ steps.release_meta.outputs.releaseId }}');
+            const tag = '${{ steps.release_meta.outputs.tag }}';
 
             const assets = await github.rest.repos.listReleaseAssets({ owner, repo, release_id: releaseId });
             const names = assets.data.map(a => a.name);
