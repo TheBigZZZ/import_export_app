@@ -49,12 +49,22 @@ var
 
 function UserDataRoot: string;
 begin
-	Result := ExpandConstant('{userprofile}\TradeDesk');
+	var up: string;
+	up := GetEnv('USERPROFILE');
+	if up = '' then
+		Result := ExpandConstant('{userappdata}\TradeDesk')
+	else
+		Result := up + '\\TradeDesk';
 end;
 
 function ConnectionSettingsPath: string;
 begin
-	Result := ExpandConstant('{userprofile}\TradeDesk\client-settings.json');
+	var up: string;
+	up := GetEnv('USERPROFILE');
+	if up = '' then
+		Result := ExpandConstant('{userappdata}\TradeDesk\\client-settings.json')
+	else
+		Result := up + '\\TradeDesk\\client-settings.json';
 end;
 
 function CurrentBackendUrl: string;
@@ -75,76 +85,12 @@ end;
 
 procedure UpdateDeploymentControls(Sender: TObject);
 begin
-	BackendUrlEdit.Enabled := SharedBackendRadio.Checked;
-	RememberConnectionCheckbox.Enabled := True;
-	UpdateDeploymentSummary;
+	// No-op: installer should not configure runtime backend during install.
 end;
 
 procedure CreateInstallerWorkflowPage;
 begin
-	DeploymentPage := CreateCustomPage(
-		wpWelcome,
-		'Choose Your Deployment',
-		'Tell TradeDesk how this PC should connect so the app starts in the right mode.'
-	);
-
-	LocalBackendRadio := TNewRadioButton.Create(DeploymentPage.Surface);
-	with LocalBackendRadio do
-	begin
-		Parent := DeploymentPage.Surface;
-		Left := ScaleX(0);
-		Top := ScaleY(8);
-		Width := DeploymentPage.Surface.ClientWidth;
-		Caption := 'This is the main PC and should run the local backend';
-		Checked := True;
-		OnClick := @UpdateDeploymentControls;
-	end;
-
-	SharedBackendRadio := TNewRadioButton.Create(DeploymentPage.Surface);
-	with SharedBackendRadio do
-	begin
-		Parent := DeploymentPage.Surface;
-		Left := ScaleX(0);
-		Top := ScaleY(32);
-		Width := DeploymentPage.Surface.ClientWidth;
-		Caption := 'This PC should connect to a shared backend on another machine';
-		OnClick := @UpdateDeploymentControls;
-	end;
-
-	BackendUrlEdit := TNewEdit.Create(DeploymentPage.Surface);
-	with BackendUrlEdit do
-	begin
-		Parent := DeploymentPage.Surface;
-		Left := ScaleX(24);
-		Top := ScaleY(60);
-		Width := ScaleX(360);
-		Text := 'http://127.0.0.1:8742';
-		Enabled := False;
-	end;
-
-	RememberConnectionCheckbox := TNewCheckBox.Create(DeploymentPage.Surface);
-	with RememberConnectionCheckbox do
-	begin
-		Parent := DeploymentPage.Surface;
-		Left := ScaleX(24);
-		Top := ScaleY(92);
-		Width := DeploymentPage.Surface.ClientWidth;
-		Caption := 'Remember this connection on this PC';
-		Checked := True;
-	end;
-
-	DeploymentSummaryLabel := TNewStaticText.Create(DeploymentPage.Surface);
-	with DeploymentSummaryLabel do
-	begin
-		Parent := DeploymentPage.Surface;
-		Left := ScaleX(0);
-		Top := ScaleY(124);
-		Width := DeploymentPage.Surface.ClientWidth;
-		AutoSize := False;
-		Caption := 'Choose local backend if this PC will host TradeDesk.'#13#10'Choose shared backend if another machine already runs the backend service.';
-	end;
-
-	UpdateDeploymentControls(nil);
+	// Deployment UI removed: runtime backend selection is handled when the app first runs.
 end;
 
 procedure CreateUninstallOptionsPage;
@@ -170,18 +116,8 @@ end;
 
 function ValidateDeploymentPage(): Boolean;
 begin
+	// No validation needed; deployment page is not presented during install.
 	Result := True;
-	if DeploymentPage = nil then
-		Exit;
-
-	if not SharedBackendRadio.Checked then
-		Exit;
-
-	if Trim(BackendUrlEdit.Text) = '' then
-	begin
-		MsgBox('Enter the shared backend URL before continuing.', mbError, MB_OK);
-		Result := False;
-	end;
 end;
 
 procedure PersistConnectionSettings;
@@ -190,31 +126,12 @@ var
 	SettingsPath: string;
 	BackendUrl: string;
 begin
-	if not RememberConnectionCheckbox.Checked then
-	begin
-		SettingsPath := ConnectionSettingsPath;
-		if FileExists(SettingsPath) then
-			DeleteFile(SettingsPath);
-		Exit;
-	end;
-
-	BackendUrl := CurrentBackendUrl;
-	if BackendUrl = '' then
-		Exit;
-
-	SettingsPath := ConnectionSettingsPath;
-	ForceDirectories(ExtractFileDir(SettingsPath));
-	SetArrayLength(Lines, 4);
-	Lines[0] := '{';
-	Lines[1] := '  "backend_url": "' + BackendUrl + '",';
-	Lines[2] := '  "remember": true';
-	Lines[3] := '}';
-	SaveStringsToUTF8FileWithoutBOM(SettingsPath, Lines, False);
+	// Disabled: do not persist backend connection settings at install time.
 end;
 
 procedure InitializeWizard;
 begin
-	CreateInstallerWorkflowPage;
+	// Default installer wizard only; no deployment UI.
 end;
 
 function InitializeUninstall(): Boolean;
@@ -225,29 +142,20 @@ end;
 
 function NextButtonClick(CurPageID: Integer): Boolean;
 begin
+	// No custom page validation required.
 	Result := True;
-	if Assigned(DeploymentPage) and (CurPageID = DeploymentPage.ID) then
-		Result := ValidateDeploymentPage();
 end;
 
 procedure CurStepChanged(CurStep: TSetupStep);
 begin
-	if CurStep = ssPostInstall then
-		PersistConnectionSettings;
+	// Do not persist configuration during installation.
 end;
 
 function UpdateReadyMemo(Space, NewLine, MemoUserInfoInfo, MemoDirInfo, MemoTypeInfo,
 	MemoComponentsInfo, MemoGroupInfo, MemoTasksInfo: String): String;
 begin
-	Result := MemoDirInfo + NewLine;
-	Result := Result + Space + 'TradeDesk deployment' + NewLine;
-	if LocalBackendRadio.Checked then
-		Result := Result + Space + '  - Local backend on this PC' + NewLine
-	else
-		Result := Result + Space + '  - Shared backend: ' + Trim(BackendUrlEdit.Text) + NewLine;
-	if RememberConnectionCheckbox.Checked then
-		Result := Result + Space + '  - Connection will be remembered for this Windows profile' + NewLine;
-	Result := Result + MemoGroupInfo + MemoTasksInfo;
+	// Keep ready memo minimal and focused on install directories/tasks.
+	Result := MemoDirInfo + NewLine + MemoGroupInfo + MemoTasksInfo;
 end;
 
 procedure CurUninstallStepChanged(CurUninstallStep: TUninstallStep);
