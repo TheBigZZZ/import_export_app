@@ -194,10 +194,11 @@ class SetupHelpDialog(QDialog):
 
 
 class MainWindow(QMainWindow):
-    def __init__(self, backend_url: str):
+    def __init__(self, backend_url: str, on_close=None):
         super().__init__()
         self.setWindowTitle("TradeDesk ERP")
         self.resize(1400, 860)
+        self._on_close = on_close
 
         self.api_client = ApiClient(backend_url)
         self.live_monitor: LiveUpdateMonitor | None = None
@@ -526,6 +527,11 @@ class MainWindow(QMainWindow):
             self.close()
 
     def closeEvent(self, event):
+        try:
+            if callable(self._on_close):
+                self._on_close()
+        except Exception:
+            pass
         self._stop_live_monitor()
         self.api_client.close()
         super().closeEvent(event)

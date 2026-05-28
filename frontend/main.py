@@ -620,18 +620,24 @@ def main() -> int:
     backend_proc = start_backend(project_root) if should_start_local else None
     _dbg(f"backend_proc set: {bool(backend_proc)}")
 
+    def _shutdown_backend() -> None:
+        try:
+            if backend_proc is not None:
+                stop_backend(backend_proc)
+        except Exception:
+            pass
+
     # Ensure backend is stopped when the application is quitting.
     try:
-        def _on_about_to_quit() -> None:
-            try:
-                if backend_proc is not None:
-                    stop_backend(backend_proc)
-            except Exception:
-                pass
-
-        app.aboutToQuit.connect(_on_about_to_quit)
+        app.aboutToQuit.connect(_shutdown_backend)
     except Exception:
         # best-effort; continue if connect fails
+        pass
+
+    try:
+        app.setQuitOnLastWindowClosed(True)
+        app.lastWindowClosed.connect(app.quit)
+    except Exception:
         pass
 
     if not should_start_local:
@@ -743,7 +749,7 @@ def main() -> int:
                 return 0
             setup_credentials = setup_dialog.created_credentials
 
-    window = MainWindow(backend_url=backend_url)
+    window = MainWindow(backend_url=backend_url, on_close=_shutdown_backend)
 
     if not headless_smoke:
         if not window.ensure_login(initial_credentials=setup_credentials):
@@ -754,11 +760,7 @@ def main() -> int:
     # Also handle OS signals to ensure clean shutdown when possible.
     try:
         def _signal_handler(signum, frame):
-            try:
-                if backend_proc is not None:
-                    stop_backend(backend_proc)
-            except Exception:
-                pass
+            _shutdown_backend()
             try:
                 QApplication.quit()
             except Exception:
@@ -774,8 +776,7 @@ def main() -> int:
         pass
 
     exit_code = app.exec()
-    if backend_proc is not None:
-        stop_backend(backend_proc)
+    _shutdown_backend()
     return exit_code
 
 
