@@ -512,6 +512,7 @@ def _run_backend_server() -> None:
         creationflags = 0
         if os.name == "nt":
             creationflags = subprocess.CREATE_NEW_PROCESS_GROUP
+            creationflags |= getattr(subprocess, "CREATE_BREAKAWAY_FROM_JOB", 0)
 
         proc = subprocess.Popen(
             backend_cmd,
@@ -552,6 +553,11 @@ def start_backend(project_root: Path) -> Any:
     env = dict(**os.environ)
     env["PYTHONPATH"] = str(project_root)
 
+    creationflags = 0
+    if os.name == "nt":
+        creationflags = subprocess.CREATE_NEW_PROCESS_GROUP
+        creationflags |= getattr(subprocess, "CREATE_BREAKAWAY_FROM_JOB", 0)
+
     proc = subprocess.Popen(
         [
             sys.executable,
@@ -566,6 +572,7 @@ def start_backend(project_root: Path) -> Any:
         ],
         cwd=str(project_root),
         env=env,
+        creationflags=creationflags,
         stdout=subprocess.DEVNULL,
         stderr=subprocess.DEVNULL,
     )

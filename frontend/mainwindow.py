@@ -414,9 +414,6 @@ class MainWindow(QMainWindow):
 
         for module_key, module_button in self.module_buttons.items():
             module_button.setChecked(module_key == key)
-
-        if key not in self._refreshed_modules:
-            self.refresh_current_module()
         self.statusBar().showMessage(f"Opened {button.text()}", 2000)
 
     def _apply_live_refresh(self) -> None:
