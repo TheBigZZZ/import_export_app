@@ -12,6 +12,7 @@ import uuid
 from datetime import datetime, timezone
 
 import httpx
+import signal
 from PySide6.QtCore import Qt
 from PySide6.QtWidgets import QApplication, QCheckBox, QDialog, QFormLayout, QHBoxLayout, QInputDialog, QLabel, QLineEdit, QMessageBox, QPushButton, QTextBrowser, QVBoxLayout
 
@@ -29,6 +30,9 @@ except ImportError:
 BACKEND_PORT = 8742
 BACKEND_STARTUP_TIMEOUT_SECONDS = 90
 BACKEND_STARTUP_POLL_INTERVAL_SECONDS = 0.5
+
+# PID file for the spawned local backend process
+PID_FILE = Path.home() / "TradeDesk" / "backend.pid"
 
 
 def _is_truthy(value: str | None) -> bool:
@@ -345,23 +349,49 @@ def _run_backend_server() -> None:
     except Exception:
         pass
 
-    # Launch the backend as a separate process via the frozen executable's
-    # dedicated backend mode. This is more reliable than multiprocessing spawn
-    # on Windows CI runners.
-    backend_cmd = [
-        sys.executable,
-        "--backend-cli",
-        "--serve",
-    ]
+    backend_cmd = [sys.executable, "--backend-cli", "--serve"]
     log_path = Path(tempfile.gettempdir()) / "tradedesk-backend.log"
     log_file = open(log_path, "a", encoding="utf-8")
     try:
+        # Best-effort stop of any previous backend recorded in PID file
+        try:
+            if PID_FILE.exists():
+                try:
+                    old_pid = int(PID_FILE.read_text(encoding="utf-8").strip())
+                    if old_pid:
+                        if os.name == "nt":
+                            subprocess.run(["taskkill", "/PID", str(old_pid), "/F", "/T"], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+                        else:
+                            try:
+                                os.killpg(old_pid, signal.SIGTERM)
+                            except Exception:
+                                try:
+                                    os.kill(old_pid, signal.SIGTERM)
+                                except Exception:
+                                    pass
+                except Exception:
+                    pass
+        except Exception:
+            pass
+
+        creationflags = 0
+        if os.name == "nt":
+            creationflags = subprocess.CREATE_NEW_PROCESS_GROUP
+
         proc = subprocess.Popen(
             backend_cmd,
             stdout=log_file,
             stderr=subprocess.STDOUT,
             cwd=str(Path(sys.executable).parent),
+            creationflags=creationflags,
         )
+
+        try:
+            PID_FILE.parent.mkdir(parents=True, exist_ok=True)
+            PID_FILE.write_text(str(proc.pid), encoding="utf-8")
+        except Exception:
+            pass
+
         for _ in range(int(BACKEND_STARTUP_TIMEOUT_SECONDS / BACKEND_STARTUP_POLL_INTERVAL_SECONDS)):
             try:
                 httpx.get(f"http://127.0.0.1:{BACKEND_PORT}/health", timeout=1.0)
@@ -402,6 +432,12 @@ def start_backend(project_root: Path) -> Any:
         stdout=subprocess.DEVNULL,
         stderr=subprocess.DEVNULL,
     )
+
+    try:
+        PID_FILE.parent.mkdir(parents=True, exist_ok=True)
+        PID_FILE.write_text(str(proc.pid), encoding="utf-8")
+    except Exception:
+        pass
 
     for _ in range(int(BACKEND_STARTUP_TIMEOUT_SECONDS / BACKEND_STARTUP_POLL_INTERVAL_SECONDS)):
         try:
@@ -445,11 +481,40 @@ def fetch_setup_status(backend_url: str) -> dict[str, Any] | None:
 
 
 def stop_backend(proc: Any) -> None:
-    proc.terminate()
-    if hasattr(proc, "wait"):
-        proc.wait(timeout=3)
-    else:
-        proc.join(timeout=3)
+    try:
+        if os.name == "nt":
+            try:
+                subprocess.run(["taskkill", "/PID", str(proc.pid), "/F", "/T"], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+            except Exception:
+                pass
+        else:
+            try:
+                os.killpg(proc.pid, signal.SIGTERM)
+            except Exception:
+                try:
+                    proc.terminate()
+                except Exception:
+                    pass
+
+        if hasattr(proc, "wait"):
+            try:
+                proc.wait(timeout=5)
+            except Exception:
+                try:
+                    proc.kill()
+                except Exception:
+                    pass
+        else:
+            try:
+                proc.join(timeout=3)
+            except Exception:
+                pass
+    finally:
+        try:
+            if PID_FILE.exists():
+                PID_FILE.unlink()
+        except Exception:
+            pass
 
 
 def load_styles(app: QApplication, project_root: Path) -> None:
