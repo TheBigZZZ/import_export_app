@@ -205,6 +205,7 @@ class MainWindow(QMainWindow):
         self.user_role: str | None = None
         self.current_module_key = "dashboard"
         self._pending_live_modules: set[str] = set()
+        self._refreshed_modules: set[str] = set()
         self._live_refresh_timer = QTimer(self)
         self._live_refresh_timer.setSingleShot(True)
         self._live_refresh_timer.timeout.connect(self._apply_live_refresh)
@@ -251,6 +252,7 @@ class MainWindow(QMainWindow):
         self.stack.setContentsMargins(0, 0, 0, 0)
 
         self._build_modules()
+        QTimer.singleShot(0, self.refresh_current_module)
 
         body_layout.addWidget(self.sidebar)
         body_layout.addWidget(self.stack, 1)
@@ -376,6 +378,14 @@ class MainWindow(QMainWindow):
             except Exception:
                 pass
 
+    def refresh_current_module(self) -> None:
+        widget = self.stack.currentWidget()
+        if widget is None:
+            return
+        key = self.current_module_key
+        self._refreshed_modules.add(key)
+        self._safe_refresh_widget(widget)
+
     def switch_module(self, key: str) -> None:
         widget = self.module_widgets.get(key)
         button = self.module_buttons.get(key)
@@ -405,7 +415,8 @@ class MainWindow(QMainWindow):
         for module_key, module_button in self.module_buttons.items():
             module_button.setChecked(module_key == key)
 
-        self._safe_refresh_widget(widget)
+        if key not in self._refreshed_modules:
+            self.refresh_current_module()
         self.statusBar().showMessage(f"Opened {button.text()}", 2000)
 
     def _apply_live_refresh(self) -> None:
