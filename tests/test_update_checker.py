@@ -3,8 +3,6 @@ from __future__ import annotations
 import hashlib
 from pathlib import Path
 
-from PySide6.QtWidgets import QDialog
-
 from frontend import update_checker
 
 
@@ -52,7 +50,7 @@ def test_update_workflow_downloads_verifies_and_launches(tmp_path, monkeypatch):
             launched["parent"] = parent
 
         def exec(self) -> int:
-            return QDialog.Accepted
+            return update_checker.QDialog.Accepted
 
         def run_download(self, installer_url: str, target_path: Path) -> None:
             launched["installer_url"] = installer_url
@@ -107,7 +105,7 @@ def test_update_workflow_skips_when_current_version_is_newer(monkeypatch):
             prompt_used["value"] = True
 
         def exec(self) -> int:
-            return QDialog.Accepted
+            return update_checker.QDialog.Accepted
 
         def run_download(self, installer_url: str, target_path: Path) -> None:
             raise AssertionError("Should not download when current version is newer")
