@@ -4,7 +4,7 @@
 #define MyAppExeName "TradeDeskERP.exe"
 
 [Setup]
-AppId={{0A4B911F-2A5D-4F17-9A6F-9231C83433D5}
+AppId={{0A4B911F-2A5D-4F17-9A6F-9231C83433D5}}
 AppName={#MyAppName}
 AppVersion={#MyAppVersion}
 AppPublisher={#MyAppPublisher}
