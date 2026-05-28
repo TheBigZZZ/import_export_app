@@ -22,6 +22,8 @@ from PySide6.QtWidgets import (
     QWidget,
 )
 
+import httpx
+
 from .api_client import ApiClient
 from .error_messages import friendly_exception_message, friendly_http_error
 from .live_updates import LiveUpdateMonitor
@@ -375,6 +377,101 @@ class MainWindow(QMainWindow):
         current_widget = self.stack.currentWidget()
         if current_widget is not None:
             self._safe_refresh_widget(current_widget)
+
+    def _start_live_monitor(self) -> None:
+        try:
+            self._stop_live_monitor()
+        except Exception:
+            pass
+
+        try:
+            self.live_monitor = LiveUpdateMonitor(self.api_client)
+            self.live_monitor.connected.connect(lambda: self.statusBar().showMessage("Live sync connected", 3000))
+            self.live_monitor.disconnected.connect(self._on_live_disconnected)
+            self.live_monitor.event_received.connect(self._on_live_event)
+            self.live_monitor.start()
+        except Exception:
+            self.live_monitor = None
+
+    def _stop_live_monitor(self) -> None:
+        if self.live_monitor is None:
+            return
+        try:
+            self.live_monitor.stop()
+        except Exception:
+            pass
+        self.live_monitor = None
+
+    def ensure_login(self, initial_credentials: dict[str, str] | None = None) -> bool:
+        # Persistent loop until user authenticates or cancels
+        while True:
+            dialog = LoginDialog(self)
+            if initial_credentials:
+                dialog.prefill(username=initial_credentials.get("username"), password=initial_credentials.get("password"))
+                initial_credentials = None
+
+            res = dialog.exec()
+            if res != QDialog.Accepted:
+                return False
+
+            username = dialog.username.text().strip()
+            password = dialog.password.text()
+
+            if not username or not password:
+                dialog.show_error("Username and password are required")
+                continue
+
+            try:
+                resp = httpx.post(f"{self.api_client.base_url}/api/auth/login", json={"username": username, "password": password}, timeout=10.0)
+            except Exception as exc:
+                dialog.show_error(friendly_exception_message(exc, "Login"))
+                continue
+
+            if resp.status_code != 200:
+                dialog.show_error(friendly_http_error(resp, "Login"))
+                continue
+
+            try:
+                body = resp.json()
+            except Exception:
+                dialog.show_error("Invalid response from server")
+                continue
+
+            access = body.get("access_token")
+            refresh = body.get("refresh_token")
+            if not access or not refresh:
+                dialog.show_error("Login failed: missing tokens")
+                continue
+
+            try:
+                self.api_client.set_tokens(access, refresh)
+            except Exception:
+                # tokens stored best-effort; continue
+                pass
+
+            # fetch current user
+            try:
+                me = httpx.get(f"{self.api_client.base_url}/api/auth/me", headers=self.api_client.auth_headers(), timeout=5.0)
+            except Exception as exc:
+                dialog.show_error(friendly_exception_message(exc, "Fetch user"))
+                continue
+
+            if me.status_code != 200:
+                dialog.show_error(friendly_http_error(me, "Fetch user"))
+                continue
+
+            try:
+                user = me.json()
+            except Exception:
+                dialog.show_error("Failed to parse user info")
+                continue
+
+            self.user_role = user.get("role")
+            display_name = user.get("full_name") or user.get("username") or ""
+            self.user_label.setText(display_name or "Logged in")
+            self._apply_user_visibility()
+            self._start_live_monitor()
+            return True
 
     def logout(self) -> None:
         self._stop_live_monitor()

@@ -54,7 +54,7 @@ async def integration_client(tmp_path: Path):
             email=None,
             # Use environment-driven test admin password when set, otherwise use a safe default for local tests
             password_hash=hash_password(os.environ.get('TRADEDESK_TEST_ADMIN_PASS', 'TestPassw0rd!')),
-            role="admin",
+            role="super_admin",
             is_active=True,
         )
         session.add(admin)
