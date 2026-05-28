@@ -151,6 +151,11 @@ def _resolve_backend_target() -> tuple[str, bool, bool]:
             backend_url = f"http://{backend_url}"
         return backend_url.rstrip("/"), False, False
 
+    # Smoke tests must always start a local backend so the packaged EXE is
+    # validated end-to-end instead of reusing any persisted connection URL.
+    if _is_truthy(os.environ.get("TRADEDESK_HEADLESS_SMOKE")):
+        return f"http://127.0.0.1:{BACKEND_PORT}", True, False
+
     stored = load_connection_settings()
     if stored and not args.configure_connection and not os.environ.get("TRADEDESK_CONFIGURE_CONNECTION"):
         backend_url = stored.backend_url.strip()
@@ -169,9 +174,6 @@ def _resolve_backend_target() -> tuple[str, bool, bool]:
             return f"http://127.0.0.1:{BACKEND_PORT}", True, False
     except Exception:
         pass
-
-    if _is_truthy(os.environ.get("TRADEDESK_HEADLESS_SMOKE")):
-        return f"http://127.0.0.1:{BACKEND_PORT}", True, False
 
     return f"http://127.0.0.1:{BACKEND_PORT}", True, True
 
