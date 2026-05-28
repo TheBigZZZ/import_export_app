@@ -20,7 +20,16 @@ jobs:
           mkdir -p data || true
           python -m tradedesk.backend.cli --backup-db data/backups || true
       - name: Upload backups
+        run: |
+          mkdir -p data || true
+          if [ -d data/backups ]; then
+            tar -czf data/daily-backups.tar.gz -C data backups || true
+          else
+            echo 'No backups generated'
+          fi
+        shell: bash
+      - name: Upload backups
         uses: actions/upload-artifact@v4
         with:
           name: daily-backups
-          path: data/backups/**
+          path: data/daily-backups.tar.gz

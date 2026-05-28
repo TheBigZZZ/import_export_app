@@ -90,9 +90,17 @@ jobs:
           & $makensis packaging\installer\tradedesk_installer.nsi
 
       - name: Upload build artifact (workflow)
+        run: |
+          $zip = 'tradedesk-artifacts.zip'
+          if (Test-Path $zip) { Remove-Item $zip -Force }
+          $files = @()
+          if (Test-Path 'dist\TradeDeskERP\TradeDeskERP.exe') { $files += 'dist\TradeDeskERP\TradeDeskERP.exe' }
+          if (Test-Path 'dist\TradeDeskERP-Setup.exe') { $files += 'dist\TradeDeskERP-Setup.exe' }
+          if ($files.Count -eq 0) { Write-Host 'No build artifacts found to zip.'; exit 1 }
+          Compress-Archive -Path $files -DestinationPath $zip -Force
+        shell: pwsh
+      - name: Upload build artifact (workflow)
         uses: actions/upload-artifact@v4
         with:
           name: tradedesk-exe
-          path: |
-            dist/TradeDeskERP/TradeDeskERP.exe
-            dist/TradeDeskERP-Setup.exe
+          path: tradedesk-artifacts.zip
