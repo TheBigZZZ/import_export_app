@@ -464,6 +464,8 @@ def _run_backend_server() -> None:
     backend_cmd = [sys.executable, "--backend-cli", "--serve"]
     log_path = Path(tempfile.gettempdir()) / "tradedesk-backend.log"
     log_file = open(log_path, "a", encoding="utf-8")
+    env = dict(os.environ)
+    env["TRADEDESK_BACKEND_CHILD"] = "1"
     try:
         # Best-effort stop of any previous backend recorded in PID file
         try:
@@ -522,6 +524,7 @@ def _run_backend_server() -> None:
             stderr=subprocess.STDOUT,
             cwd=str(Path(sys.executable).parent),
             creationflags=creationflags,
+            env=env,
         )
 
         try:
