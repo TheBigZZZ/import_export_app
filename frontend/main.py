@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import argparse
+import ctypes
 import json
 import os
 import subprocess
@@ -35,6 +36,103 @@ BACKEND_STARTUP_POLL_INTERVAL_SECONDS = 0.5
 
 # PID file for the spawned local backend process
 PID_FILE = Path.home() / "TradeDesk" / "backend.pid"
+_BACKEND_JOB_HANDLE: int | None = None
+
+
+def _close_backend_job_handle() -> None:
+    global _BACKEND_JOB_HANDLE
+
+    if os.name != "nt" or not _BACKEND_JOB_HANDLE:
+        return
+
+    try:
+        ctypes.windll.kernel32.CloseHandle(_BACKEND_JOB_HANDLE)
+    except Exception:
+        pass
+    finally:
+        _BACKEND_JOB_HANDLE = None
+
+
+def _attach_backend_job_object(proc: Any) -> None:
+    if os.name != "nt":
+        return
+
+    global _BACKEND_JOB_HANDLE
+    _close_backend_job_handle()
+
+    try:
+        kernel32 = ctypes.windll.kernel32
+
+        job_handle = kernel32.CreateJobObjectW(None, None)
+        if not job_handle:
+            return
+
+        class JOBOBJECT_BASIC_LIMIT_INFORMATION(ctypes.Structure):
+            _fields_ = [
+                ("PerProcessUserTimeLimit", ctypes.c_longlong),
+                ("PerJobUserTimeLimit", ctypes.c_longlong),
+                ("LimitFlags", ctypes.wintypes.DWORD),
+                ("MinimumWorkingSetSize", ctypes.c_size_t),
+                ("MaximumWorkingSetSize", ctypes.c_size_t),
+                ("ActiveProcessLimit", ctypes.wintypes.DWORD),
+                ("Affinity", ctypes.c_size_t),
+                ("PriorityClass", ctypes.wintypes.DWORD),
+                ("SchedulingClass", ctypes.wintypes.DWORD),
+            ]
+
+        class IO_COUNTERS(ctypes.Structure):
+            _fields_ = [
+                ("ReadOperationCount", ctypes.c_ulonglong),
+                ("WriteOperationCount", ctypes.c_ulonglong),
+                ("OtherOperationCount", ctypes.c_ulonglong),
+                ("ReadTransferCount", ctypes.c_ulonglong),
+                ("WriteTransferCount", ctypes.c_ulonglong),
+                ("OtherTransferCount", ctypes.c_ulonglong),
+            ]
+
+        class JOBOBJECT_EXTENDED_LIMIT_INFORMATION(ctypes.Structure):
+            _fields_ = [
+                ("BasicLimitInformation", JOBOBJECT_BASIC_LIMIT_INFORMATION),
+                ("IoInfo", IO_COUNTERS),
+                ("ProcessMemoryLimit", ctypes.c_size_t),
+                ("JobMemoryLimit", ctypes.c_size_t),
+                ("PeakProcessMemoryUsed", ctypes.c_size_t),
+                ("PeakJobMemoryUsed", ctypes.c_size_t),
+            ]
+
+        limit_info = JOBOBJECT_EXTENDED_LIMIT_INFORMATION()
+        limit_info.BasicLimitInformation.LimitFlags = 0x00002000  # JOB_OBJECT_LIMIT_KILL_ON_JOB_CLOSE
+        if not kernel32.SetInformationJobObject(job_handle, 9, ctypes.byref(limit_info), ctypes.sizeof(limit_info)):
+            kernel32.CloseHandle(job_handle)
+            return
+
+        process_handle = getattr(proc, "_handle", None)
+        close_process_handle = False
+        if not process_handle:
+            process_handle = kernel32.OpenProcess(0x001F0FFF, False, int(proc.pid))
+            close_process_handle = bool(process_handle)
+
+        if not process_handle:
+            kernel32.CloseHandle(job_handle)
+            return
+
+        if not kernel32.AssignProcessToJobObject(job_handle, process_handle):
+            if close_process_handle:
+                kernel32.CloseHandle(process_handle)
+            kernel32.CloseHandle(job_handle)
+            return
+
+        if close_process_handle:
+            kernel32.CloseHandle(process_handle)
+
+        _BACKEND_JOB_HANDLE = job_handle
+    except Exception:
+        try:
+            if _BACKEND_JOB_HANDLE:
+                ctypes.windll.kernel32.CloseHandle(_BACKEND_JOB_HANDLE)
+        except Exception:
+            pass
+        _BACKEND_JOB_HANDLE = None
 
 
 def _is_truthy(value: str | None) -> bool:
@@ -429,6 +527,8 @@ def _run_backend_server() -> None:
         except Exception:
             pass
 
+        _attach_backend_job_object(proc)
+
         for _ in range(int(BACKEND_STARTUP_TIMEOUT_SECONDS / BACKEND_STARTUP_POLL_INTERVAL_SECONDS)):
             try:
                 httpx.get(f"http://127.0.0.1:{BACKEND_PORT}/health", timeout=1.0)
@@ -475,6 +575,8 @@ def start_backend(project_root: Path) -> Any:
         PID_FILE.write_text(str(proc.pid), encoding="utf-8")
     except Exception:
         pass
+
+    _attach_backend_job_object(proc)
 
     for _ in range(int(BACKEND_STARTUP_TIMEOUT_SECONDS / BACKEND_STARTUP_POLL_INTERVAL_SECONDS)):
         try:
@@ -552,6 +654,7 @@ def stop_backend(proc: Any) -> None:
                 PID_FILE.unlink()
         except Exception:
             pass
+        _close_backend_job_handle()
 
 
 def load_styles(app: QApplication, project_root: Path) -> None:
@@ -626,6 +729,12 @@ def main() -> int:
                 stop_backend(backend_proc)
         except Exception:
             pass
+
+    def _unhandled_exception_hook(exc_type, exc, tb) -> None:
+        _shutdown_backend()
+        sys.__excepthook__(exc_type, exc, tb)
+
+    sys.excepthook = _unhandled_exception_hook
 
     # Ensure backend is stopped when the application is quitting.
     try:
