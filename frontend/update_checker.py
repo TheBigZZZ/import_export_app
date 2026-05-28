@@ -280,11 +280,6 @@ def check_for_update(parent, current_version: str) -> bool:
             "installer_sha256": "..."   (required in production)
     }
     """
-    # Developer/testing shortcut: simulate the user accepting an update and
-    # launching the installer by setting TRADEDESK_SIMULATE_ACCEPT_UPDATE=1.
-    if os.environ.get("TRADEDESK_SIMULATE_ACCEPT_UPDATE", "").strip().lower() in {"1", "true", "yes"}:
-        return True
-
     manifest_url = os.environ.get("TRADEDESK_UPDATE_MANIFEST_URL")
     # Default to the repo's latest release manifest if not configured.
     if not manifest_url:
