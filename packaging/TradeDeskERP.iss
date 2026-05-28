@@ -166,6 +166,8 @@ procedure CurUninstallStepChanged(CurUninstallStep: TUninstallStep);
 var
 	DeleteUserData: Boolean;
 	UserDataPath: string;
+	PIDPath: string;
+	ResultCode: Integer;
 begin
 	if CurUninstallStep = usUninstall then
 	begin
@@ -175,41 +177,24 @@ begin
 		else
 			DeleteUserDataChoice := False;
 
-		// Attempt to stop any running backend process recorded by the PID file.
-		// This prevents the backend from continuing to run after uninstall.
-		var
-			PIDPath: string;
-			PIDStr: string;
-			PID: Integer;
+		// Attempt to stop any running backend process and any TradeDesk executables.
+		// This prevents the backend or frontend from continuing to run after uninstall.
+		PIDPath := UserDataRoot + '\\backend.pid';
+		if FileExists(PIDPath) then
 		begin
-			PIDPath := UserDataRoot + '\\backend.pid';
+			// Best effort: try to terminate known image names first.
+			Exec('taskkill', '/IM TradeDeskERP.exe /F /T', '', SW_HIDE, ewWaitUntilTerminated, ResultCode);
+			Exec('taskkill', '/IM python.exe /F /T', '', SW_HIDE, ewWaitUntilTerminated, ResultCode);
+
+			// Finally, remove the PID file to avoid stale state.
 			if FileExists(PIDPath) then
-			begin
-				PIDStr := Trim(ReadFile(PIDPath));
-				if PIDStr <> '' then
-				begin
-					try
-						PID := StrToInt(PIDStr);
-						// Best-effort: try to terminate the process via taskkill.
-						if Exec('taskkill', '/PID ' + IntToStr(PID) + ' /F /T', '', SW_HIDE, ewWaitUntilTerminated, ResultCode) then
-						begin
-							// Remove PID file after successful kill
-							if FileExists(PIDPath) then
-								DeleteFile(PIDPath);
-						end
-						else
-						begin
-							// If taskkill failed, still attempt to delete PID file to avoid stale state.
-							if FileExists(PIDPath) then
-								DeleteFile(PIDPath);
-						end;
-					except
-						// On any error, continue uninstall but ensure PID file removed if possible.
-						if FileExists(PIDPath) then
-							DeleteFile(PIDPath);
-					end;
-				end;
-			end;
+				DeleteFile(PIDPath);
+		end
+		else
+		begin
+			// Even if there is no PID file, attempt to ensure no TradeDesk processes remain.
+			Exec('taskkill', '/IM TradeDeskERP.exe /F /T', '', SW_HIDE, ewWaitUntilTerminated, ResultCode);
+			Exec('taskkill', '/IM python.exe /F /T', '', SW_HIDE, ewWaitUntilTerminated, ResultCode);
 		end;
 
 		Exit;
