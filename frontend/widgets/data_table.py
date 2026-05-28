@@ -43,7 +43,6 @@ class DataTable(QWidget):
         self.table.setAlternatingRowColors(True)
         self.table.setEditTriggers(QAbstractItemView.NoEditTriggers)
         self.table.setWordWrap(False)
-        self.table.setUniformRowHeights(True)
         self.table.setTextElideMode(Qt.TextElideMode.ElideRight)
         self.table.setHorizontalScrollMode(QAbstractItemView.ScrollMode.ScrollPerPixel)
         self.table.setVerticalScrollMode(QAbstractItemView.ScrollMode.ScrollPerPixel)
