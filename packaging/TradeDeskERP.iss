@@ -49,8 +49,9 @@ var
 	DeleteUserDataChoice: Boolean;
 
 function UserDataRoot: string;
+var
+	up: string;
 begin
-	var up: string;
 	up := GetEnv('USERPROFILE');
 	if up = '' then
 		Result := ExpandConstant('{userappdata}\TradeDesk')
@@ -59,8 +60,9 @@ begin
 end;
 
 function ConnectionSettingsPath: string;
+var
+	up: string;
 begin
-	var up: string;
 	up := GetEnv('USERPROFILE');
 	if up = '' then
 		Result := ExpandConstant('{userappdata}\TradeDesk\\client-settings.json')
