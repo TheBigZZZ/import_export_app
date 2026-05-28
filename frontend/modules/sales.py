@@ -35,6 +35,7 @@ class SalesModule(BaseModuleWidget):
         form.addRow("Unit Price", self.unit_price)
         form.addRow("Cost Price", self.cost_price)
         form.addRow("", create_btn)
+        self.configure_form_layout(form)
 
         actions = QHBoxLayout()
         self.post_invoice_id = QLineEdit()
@@ -49,6 +50,8 @@ class SalesModule(BaseModuleWidget):
         actions.addWidget(reload_btn)
         actions.addWidget(self.result_label)
         actions.addStretch(1)
+
+        self.layout().setSpacing(10)
 
         self.layout().addWidget(create_box)
         self.layout().addLayout(actions)
@@ -73,7 +76,7 @@ class SalesModule(BaseModuleWidget):
             ]
             for item in rows_data
         ]
-        self.table.set_rows(["ID", "Invoice", "Customer", "Total", "Status"], rows)
+        self.table.set_rows(["ID", "Invoice", "Customer", "Total", "Status"], rows, stretch_columns={1, 2})
 
     def create_invoice(self) -> None:
         try:

@@ -5,13 +5,14 @@ import json
 from dataclasses import dataclass
 from pathlib import Path
 
-from PySide6.QtCore import QTimer, Qt
+from PySide6.QtCore import QEasingCurve, QPropertyAnimation, QTimer, Qt
 from PySide6.QtWidgets import (
     QDialog,
     QFormLayout,
     QHBoxLayout,
     QLabel,
     QLineEdit,
+    QGraphicsOpacityEffect,
     QMainWindow,
     QMessageBox,
     QPushButton,
@@ -206,13 +207,17 @@ class MainWindow(QMainWindow):
         self._live_refresh_timer = QTimer(self)
         self._live_refresh_timer.setSingleShot(True)
         self._live_refresh_timer.timeout.connect(self._apply_live_refresh)
+        self._module_transition: QPropertyAnimation | None = None
 
         shell = QWidget()
         shell_layout = QVBoxLayout(shell)
-        shell_layout.setContentsMargins(0, 0, 0, 0)
+        shell_layout.setContentsMargins(8, 8, 8, 8)
+        shell_layout.setSpacing(8)
 
         top_bar = QWidget()
         top_layout = QHBoxLayout(top_bar)
+        top_layout.setContentsMargins(10, 8, 10, 8)
+        top_layout.setSpacing(10)
         self.company_label = QLabel("TradeDesk ERP")
         self.company_label.setObjectName("titleLabel")
         self.user_label = QLabel("Not logged in")
@@ -229,16 +234,20 @@ class MainWindow(QMainWindow):
         body = QWidget()
         body_layout = QHBoxLayout(body)
         body_layout.setContentsMargins(0, 0, 0, 0)
+        body_layout.setSpacing(8)
 
         self.sidebar = QWidget()
         self.sidebar.setObjectName("sidebar")
-        self.sidebar.setFixedWidth(240)
+        self.sidebar.setFixedWidth(220)
         self.sidebar_layout = QVBoxLayout(self.sidebar)
         self.sidebar_layout.setAlignment(Qt.AlignTop)
+        self.sidebar_layout.setContentsMargins(10, 10, 10, 10)
+        self.sidebar_layout.setSpacing(6)
 
         self.stack = QStackedWidget()
         self.module_buttons: dict[str, QPushButton] = {}
         self.module_widgets: dict[str, QWidget] = {}
+        self.stack.setContentsMargins(0, 0, 0, 0)
 
         self._build_modules()
 
@@ -276,6 +285,7 @@ class MainWindow(QMainWindow):
 
         for index, entry in enumerate(entries):
             button = QPushButton(entry.label)
+            button.setObjectName("navButton")
             button.setCheckable(True)
             button.clicked.connect(lambda checked=False, key=entry.key: self.switch_module(key))
             self.sidebar_layout.addWidget(button)
@@ -373,6 +383,23 @@ class MainWindow(QMainWindow):
 
         self.current_module_key = key
         self.stack.setCurrentWidget(widget)
+
+        effect = QGraphicsOpacityEffect(widget)
+        widget.setGraphicsEffect(effect)
+        effect.setOpacity(0.0)
+        animation = QPropertyAnimation(effect, b"opacity", self)
+        animation.setDuration(140)
+        animation.setStartValue(0.0)
+        animation.setEndValue(1.0)
+        animation.setEasingCurve(QEasingCurve.Type.OutCubic)
+
+        def _clear_effect() -> None:
+            widget.setGraphicsEffect(None)
+            self._module_transition = None
+
+        animation.finished.connect(_clear_effect)
+        self._module_transition = animation
+        animation.start()
 
         for module_key, module_button in self.module_buttons.items():
             module_button.setChecked(module_key == key)

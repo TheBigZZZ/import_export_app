@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import asyncio
 
-from PySide6.QtWidgets import QCheckBox, QFormLayout, QGroupBox, QHBoxLayout, QLabel, QLineEdit, QMessageBox, QPushButton, QScrollArea, QVBoxLayout, QWidget
+from PySide6.QtWidgets import QCheckBox, QFormLayout, QGroupBox, QGridLayout, QHBoxLayout, QLabel, QLineEdit, QMessageBox, QPushButton, QScrollArea, QVBoxLayout, QWidget
 
 from ..error_messages import friendly_exception_message, friendly_http_error
 from ..widgets.data_table import DataTable
@@ -24,8 +24,8 @@ class SettingsModule(BaseModuleWidget):
 
         content = QWidget()
         content_layout = QVBoxLayout(content)
-        content_layout.setContentsMargins(4, 4, 4, 4)
-        content_layout.setSpacing(14)
+        content_layout.setContentsMargins(8, 8, 8, 8)
+        content_layout.setSpacing(12)
         scroll.setWidget(content)
 
         layout = self.layout()
@@ -55,6 +55,7 @@ class SettingsModule(BaseModuleWidget):
         form.addRow("Email", self.company_email)
         form.addRow("", self.allow_negative_stock)
         form.addRow("", row_actions)
+        self.configure_form_layout(form, label_width=180)
 
         # SMTP / Email settings
         email_box = QGroupBox("Email / SMTP")
@@ -75,6 +76,7 @@ class SettingsModule(BaseModuleWidget):
         email_form.addRow("From Address", self.notify_from)
         email_form.addRow("To Address (for test)", self.notify_to)
         email_form.addRow("", test_email_btn)
+        self.configure_form_layout(email_form, label_width=180)
 
         backup_box = QGroupBox("Backups")
         backup_layout = QFormLayout(backup_box)
@@ -92,10 +94,8 @@ class SettingsModule(BaseModuleWidget):
         backup_actions.addWidget(refresh_backups_btn)
         backup_layout.addRow("Restore File", self.restore_file_name)
         backup_layout.addRow("", backup_actions)
+        self.configure_form_layout(backup_layout, label_width=150)
 
-        content_layout.addWidget(company_box)
-        content_layout.addWidget(email_box)
-        content_layout.addWidget(backup_box)
         # Exchange rates section
         rates_box = QGroupBox("Exchange Rates")
         rates_layout = QFormLayout(rates_box)
@@ -121,10 +121,9 @@ class SettingsModule(BaseModuleWidget):
         rowh.addWidget(load_rates_btn)
         rowh.addWidget(create_rate_btn)
         rates_layout.addRow("", rowh)
+        self.configure_form_layout(rates_layout, label_width=190)
 
         self.rates_table = DataTable()
-        content_layout.addWidget(rates_box)
-        content_layout.addWidget(self.rates_table)
 
         # SMS test
         sms_box = QGroupBox("SMS / Notifications")
@@ -137,9 +136,21 @@ class SettingsModule(BaseModuleWidget):
         sms_form.addRow("To Number", self.sms_to)
         sms_form.addRow("Message", self.sms_message)
         sms_form.addRow("", sms_test_btn)
+        self.configure_form_layout(sms_form, label_width=130)
         content_layout.addWidget(sms_box)
-        content_layout.addWidget(QLabel("Available Backups"))
-        content_layout.addWidget(self.backups_table)
+
+        top_grid = QGridLayout()
+        top_grid.setHorizontalSpacing(12)
+        top_grid.setVerticalSpacing(12)
+        top_grid.addWidget(company_box, 0, 0)
+        top_grid.addWidget(email_box, 0, 1)
+        top_grid.addWidget(backup_box, 1, 0)
+        top_grid.addWidget(rates_box, 1, 1)
+        top_grid.addWidget(QLabel("Available Backups"), 2, 0, 1, 2)
+        top_grid.addWidget(self.backups_table, 3, 0, 1, 2)
+
+        content_layout.insertLayout(0, top_grid)
+        content_layout.addWidget(self.rates_table)
 
     def refresh(self) -> None:
         self.load_settings()
@@ -229,7 +240,7 @@ class SettingsModule(BaseModuleWidget):
             [item["file_name"], item["created_at"], str(item["size_bytes"]), item["file_path"]]
             for item in rows
         ]
-        self.backups_table.set_rows(["File", "Created", "Size", "Path"], table_rows)
+        self.backups_table.set_rows(["File", "Created", "Size", "Path"], table_rows, stretch_columns={3})
 
     def load_rates(self) -> None:
         try:
@@ -241,7 +252,7 @@ class SettingsModule(BaseModuleWidget):
             return
 
         rows = [[str(item.get('id') or ''), item.get('currency_from'), item.get('currency_to'), str(item.get('rate')), item.get('effective_date')] for item in data]
-        self.rates_table.set_rows(["ID", "From", "To", "Rate", "Effective"], rows)
+        self.rates_table.set_rows(["ID", "From", "To", "Rate", "Effective"], rows, stretch_columns={4})
 
     def create_rate(self) -> None:
         frm = self.rate_from.text().strip()

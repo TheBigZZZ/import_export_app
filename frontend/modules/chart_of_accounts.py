@@ -33,6 +33,7 @@ class ChartOfAccountsModule(BaseModuleWidget):
         form.addRow("Type", self.type_input)
         form.addRow("Parent ID", self.parent_input)
         form.addRow("", self.add_button)
+        self.configure_form_layout(form)
 
         tree_refresh = QPushButton("Reload Tree")
         tree_refresh.clicked.connect(self.load_tree)
@@ -42,6 +43,8 @@ class ChartOfAccountsModule(BaseModuleWidget):
         extra.addWidget(tree_refresh)
         extra.addWidget(self.tree_label)
         extra.addStretch(1)
+
+        self.layout().setSpacing(10)
 
         self.layout().addWidget(form_box)
         self.layout().addLayout(extra)
@@ -70,7 +73,7 @@ class ChartOfAccountsModule(BaseModuleWidget):
             ]
             for item in data
         ]
-        self.table.set_rows(["ID", "Code", "Name", "Type", "Parent", "System"], rows)
+        self.table.set_rows(["ID", "Code", "Name", "Type", "Parent", "System"], rows, stretch_columns={2})
 
     def load_tree(self) -> None:
         try:

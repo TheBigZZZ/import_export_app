@@ -37,6 +37,7 @@ class ImportCostingModule(BaseModuleWidget):
         form.addRow("FOB Cost", self.fob_cost)
         form.addRow("Freight Cost", self.freight_cost)
         form.addRow("", create_btn)
+        self.configure_form_layout(form)
 
         actions = QHBoxLayout()
         self.post_shipment_id = QLineEdit()
@@ -51,6 +52,8 @@ class ImportCostingModule(BaseModuleWidget):
         actions.addWidget(reload_btn)
         actions.addWidget(self.result_label)
         actions.addStretch(1)
+
+        self.layout().setSpacing(10)
 
         self.layout().addWidget(create_box)
         self.layout().addLayout(actions)
@@ -75,7 +78,7 @@ class ImportCostingModule(BaseModuleWidget):
             ]
             for item in rows_data
         ]
-        self.table.set_rows(["ID", "LC", "Supplier", "Landed Cost", "Status"], rows)
+        self.table.set_rows(["ID", "LC", "Supplier", "Landed Cost", "Status"], rows, stretch_columns={1})
 
     def create_shipment(self) -> None:
         try:

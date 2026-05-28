@@ -33,6 +33,7 @@ class ProductsModule(BaseModuleWidget):
         create_form.addRow("Purchase Price", self.purchase_price_input)
         create_form.addRow("Selling Price", self.selling_price_input)
         create_form.addRow("", create_btn)
+        self.configure_form_layout(create_form)
 
         movement_box = QGroupBox("Stock Movement")
         movement_form = QFormLayout(movement_box)
@@ -52,6 +53,7 @@ class ProductsModule(BaseModuleWidget):
         movement_form.addRow("Document No", self.doc_no_input)
         movement_form.addRow("Document Status", self.status_input)
         movement_form.addRow("", post_btn)
+        self.configure_form_layout(movement_form)
 
         top = QHBoxLayout()
         top.addWidget(create_box)
@@ -70,6 +72,8 @@ class ProductsModule(BaseModuleWidget):
         actions.addWidget(reload_btn)
         actions.addWidget(self.ledger_summary)
         actions.addStretch(1)
+
+        self.layout().setSpacing(10)
 
         self.layout().addLayout(top)
         self.layout().addLayout(actions)
@@ -95,7 +99,7 @@ class ProductsModule(BaseModuleWidget):
             ]
             for item in data
         ]
-        self.table.set_rows(["ID", "Code", "Name", "Unit", "Stock", "Sell Price"], rows)
+        self.table.set_rows(["ID", "Code", "Name", "Unit", "Stock", "Sell Price"], rows, stretch_columns={2})
 
     def create_product(self) -> None:
         try:

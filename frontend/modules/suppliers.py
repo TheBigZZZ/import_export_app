@@ -16,7 +16,7 @@ class SuppliersModule(BaseModuleWidget):
         super().__init__(api_client, parent)
         self.placeholder.hide()
 
-        self.table = DataTable()
+        self.table = DataTable(delete_callback=self.delete_selected)
 
         form_box = QGroupBox("Add Supplier")
         form = QFormLayout(form_box)
@@ -54,6 +54,7 @@ class SuppliersModule(BaseModuleWidget):
         h3.addWidget(self.opening_error)
         form.addRow("Opening Balance", open_container)
         form.addRow("", create_btn)
+        self.configure_form_layout(form)
 
         actions = QHBoxLayout()
         self.ledger_id_input = QLineEdit()
@@ -72,11 +73,6 @@ class SuppliersModule(BaseModuleWidget):
         self.layout().addWidget(form_box)
         self.layout().addLayout(actions)
         self.layout().addWidget(self.table)
-
-        # Add delete button
-        delete_btn = QPushButton("Delete Selected")
-        delete_btn.clicked.connect(self.delete_selected)
-        self.layout().addWidget(delete_btn)
 
     def refresh(self) -> None:
         try:
@@ -97,7 +93,7 @@ class SuppliersModule(BaseModuleWidget):
             ]
             for item in data
         ]
-        self.table.set_rows(["ID", "Code", "Name", "Country", "Balance"], rows)
+        self.table.set_rows(["ID", "Code", "Name", "Country", "Balance"], rows, stretch_columns={2})
 
     def create_supplier(self) -> None:
         # Clear previous inline errors

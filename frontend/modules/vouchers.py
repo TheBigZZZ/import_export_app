@@ -35,12 +35,15 @@ class VouchersModule(BaseModuleWidget):
         form.addRow("Amount", self.amount)
         form.addRow("Description", self.description)
         form.addRow("", self.create_button)
+        self.configure_form_layout(form)
 
         actions = QHBoxLayout()
         reload_button = QPushButton("Reload")
         reload_button.clicked.connect(self.refresh)
         actions.addWidget(reload_button)
         actions.addStretch(1)
+
+        self.layout().setSpacing(10)
 
         self.layout().addWidget(form_box)
         self.layout().addLayout(actions)
@@ -69,7 +72,7 @@ class VouchersModule(BaseModuleWidget):
                     str(len(voucher["lines"])),
                 ]
             )
-        self.table.set_rows(["Voucher No", "Type", "Date", "Debit", "Credit", "Lines"], rows)
+        self.table.set_rows(["Voucher No", "Type", "Date", "Debit", "Credit", "Lines"], rows, stretch_columns={0})
 
     def create_voucher(self) -> None:
         try:

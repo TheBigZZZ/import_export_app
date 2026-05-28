@@ -33,6 +33,7 @@ class PurchasesModule(BaseModuleWidget):
         form.addRow("Quantity", self.quantity)
         form.addRow("Unit Price", self.unit_price)
         form.addRow("", create_btn)
+        self.configure_form_layout(form)
 
         actions = QHBoxLayout()
         self.post_order_id = QLineEdit()
@@ -47,6 +48,8 @@ class PurchasesModule(BaseModuleWidget):
         actions.addWidget(reload_btn)
         actions.addWidget(self.result_label)
         actions.addStretch(1)
+
+        self.layout().setSpacing(10)
 
         self.layout().addWidget(create_box)
         self.layout().addLayout(actions)
@@ -71,7 +74,7 @@ class PurchasesModule(BaseModuleWidget):
             ]
             for item in rows_data
         ]
-        self.table.set_rows(["ID", "PO", "Supplier", "Total", "Status"], rows)
+        self.table.set_rows(["ID", "PO", "Supplier", "Total", "Status"], rows, stretch_columns={1, 2})
 
     def create_order(self) -> None:
         try:

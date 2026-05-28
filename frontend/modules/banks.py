@@ -32,6 +32,7 @@ class BanksModule(BaseModuleWidget):
         create_form.addRow("Account Number", self.account_number)
         create_form.addRow("Opening Balance", self.opening_balance)
         create_form.addRow("", add_btn)
+        self.configure_form_layout(create_form)
 
         transfer_box = QGroupBox("Bank Transfer")
         transfer_form = QFormLayout(transfer_box)
@@ -44,10 +45,13 @@ class BanksModule(BaseModuleWidget):
         transfer_form.addRow("To Bank ID", self.to_id)
         transfer_form.addRow("Amount", self.transfer_amount)
         transfer_form.addRow("", transfer_btn)
+        self.configure_form_layout(transfer_form)
 
         top = QHBoxLayout()
         top.addWidget(create_box)
         top.addWidget(transfer_box)
+
+        self.layout().setSpacing(10)
 
         self.layout().addLayout(top)
         self.layout().addWidget(self.table)
@@ -72,7 +76,7 @@ class BanksModule(BaseModuleWidget):
             ]
             for item in data
         ]
-        self.table.set_rows(["ID", "Bank", "Account", "Number", "Balance", "Currency"], rows)
+        self.table.set_rows(["ID", "Bank", "Account", "Number", "Balance", "Currency"], rows, stretch_columns={2})
 
     def create_bank(self) -> None:
         try:

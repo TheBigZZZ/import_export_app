@@ -39,6 +39,7 @@ class ExpensesModule(BaseModuleWidget):
         form.addRow("Bank Account ID", self.bank_account_id)
         form.addRow("Description", self.description)
         form.addRow("", create_btn)
+        self.configure_form_layout(form)
 
         actions = QHBoxLayout()
         reload_btn = QPushButton("Reload")
@@ -47,6 +48,8 @@ class ExpensesModule(BaseModuleWidget):
         actions.addWidget(reload_btn)
         actions.addWidget(self.status_label)
         actions.addStretch(1)
+
+        self.layout().setSpacing(10)
 
         self.layout().addWidget(form_box)
         self.layout().addLayout(actions)
@@ -74,7 +77,7 @@ class ExpensesModule(BaseModuleWidget):
             ]
             for item in data
         ]
-        self.table.set_rows(["ID", "No", "Date", "Account", "Amount", "Method", "Bank", "Description"], rows)
+        self.table.set_rows(["ID", "No", "Date", "Account", "Amount", "Method", "Bank", "Description"], rows, stretch_columns={7})
 
     def create_expense(self) -> None:
         method = self.payment_method.currentText()

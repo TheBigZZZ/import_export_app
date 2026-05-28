@@ -28,7 +28,7 @@ class UsersModule(BaseModuleWidget):
         super().__init__(api_client, parent)
         self.placeholder.hide()
 
-        self.table = DataTable()
+        self.table = DataTable(delete_callback=self.delete_selected)
 
         form_box = QGroupBox("Add User")
         form = QFormLayout(form_box)
@@ -73,13 +73,11 @@ class UsersModule(BaseModuleWidget):
         form.addRow("Role", wrap_with_icon(self.role_input, self.role_error))
         form.addRow("", QLabel(""))
         form.addRow("", create_btn)
+        self.configure_form_layout(form)
 
         actions = QHBoxLayout()
-        delete_btn = QPushButton("Delete Selected")
-        delete_btn.clicked.connect(self.delete_selected)
         reload_btn = QPushButton("Reload")
         reload_btn.clicked.connect(self.refresh)
-        actions.addWidget(delete_btn)
         actions.addWidget(reload_btn)
         actions.addStretch(1)
 
@@ -109,7 +107,7 @@ class UsersModule(BaseModuleWidget):
 
         data = response.json()
         rows = [[str(item["id"]), item["username"], item["full_name"], item.get("email") or "", item["role"], str(item["is_active"])] for item in data]
-        self.table.set_rows(["ID", "Username", "Full Name", "Email", "Role", "Active"], rows)
+        self.table.set_rows(["ID", "Username", "Full Name", "Email", "Role", "Active"], rows, stretch_columns={2, 3})
         # Reset icons after refresh
         self._clear_icons()
 

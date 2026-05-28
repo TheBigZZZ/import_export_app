@@ -36,6 +36,8 @@ class ReportsModule(BaseModuleWidget):
         actions.addWidget(export_btn)
         actions.addStretch(1)
 
+        self.layout().setSpacing(10)
+
         self.layout().addLayout(actions)
         self.layout().addWidget(self.summary)
         self.layout().addWidget(self.table)
