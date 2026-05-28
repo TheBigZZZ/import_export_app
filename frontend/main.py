@@ -608,6 +608,20 @@ def main() -> int:
     backend_proc = start_backend(project_root) if should_start_local else None
     _dbg(f"backend_proc set: {bool(backend_proc)}")
 
+    # Ensure backend is stopped when the application is quitting.
+    try:
+        def _on_about_to_quit() -> None:
+            try:
+                if backend_proc is not None:
+                    stop_backend(backend_proc)
+            except Exception:
+                pass
+
+        app.aboutToQuit.connect(_on_about_to_quit)
+    except Exception:
+        # best-effort; continue if connect fails
+        pass
+
     if not should_start_local:
         try:
             wait_for_backend(backend_url)
@@ -724,6 +738,28 @@ def main() -> int:
             return 0
 
     window.show()
+
+    # Also handle OS signals to ensure clean shutdown when possible.
+    try:
+        def _signal_handler(signum, frame):
+            try:
+                if backend_proc is not None:
+                    stop_backend(backend_proc)
+            except Exception:
+                pass
+            try:
+                QApplication.quit()
+            except Exception:
+                pass
+
+        signal.signal(signal.SIGINT, _signal_handler)
+        try:
+            signal.signal(signal.SIGTERM, _signal_handler)
+        except Exception:
+            # Some platforms may not support SIGTERM
+            pass
+    except Exception:
+        pass
 
     exit_code = app.exec()
     if backend_proc is not None:
