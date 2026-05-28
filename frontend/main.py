@@ -357,20 +357,45 @@ def _run_backend_server() -> None:
         try:
             if PID_FILE.exists():
                 try:
-                    old_pid = int(PID_FILE.read_text(encoding="utf-8").strip())
-                    if old_pid:
+                    raw = PID_FILE.read_text(encoding="utf-8").strip()
+                    old_pid = int(raw) if raw else 0
+                except Exception:
+                    old_pid = 0
+
+                if old_pid:
+                    # Check whether the PID actually refers to a running process.
                         if os.name == "nt":
-                            subprocess.run(["taskkill", "/PID", str(old_pid), "/F", "/T"], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
-                        else:
-                            try:
-                                os.killpg(old_pid, signal.SIGTERM)
-                            except Exception:
+                            # Use tasklist to confirm the PID exists on Windows.
+                            proc = subprocess.run(["tasklist", "/FI", f"PID eq {old_pid}", "/FO", "CSV"], capture_output=True, text=True)
+                            if proc.returncode != 0 or str(old_pid) not in proc.stdout:
                                 try:
-                                    os.kill(old_pid, signal.SIGTERM)
+                                    PID_FILE.unlink()
                                 except Exception:
                                     pass
-                except Exception:
-                    pass
+                            else:
+                                # Best-effort terminate the previous backend process
+                                subprocess.run(["taskkill", "/PID", str(old_pid), "/F", "/T"], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+                        else:
+                            try:
+                                os.kill(old_pid, 0)
+                            except Exception:
+                                try:
+                                    PID_FILE.unlink()
+                                except Exception:
+                                    pass
+                            else:
+                                try:
+                                    os.killpg(old_pid, signal.SIGTERM)
+                                except Exception:
+                                    try:
+                                        os.kill(old_pid, signal.SIGTERM)
+                                    except Exception:
+                                        pass
+                else:
+                    try:
+                        PID_FILE.unlink()
+                    except Exception:
+                        pass
         except Exception:
             pass
 
@@ -532,8 +557,23 @@ def main() -> int:
     app = QApplication(sys.argv)
     headless_smoke = _is_truthy(os.environ.get("TRADEDESK_HEADLESS_SMOKE"))
 
+    # Load styles before showing any dialogs so dialogs honor app stylesheet.
+    load_styles(app, project_root)
+
+    # Check for updates before showing the connection/setup dialog or starting any backend.
+    # If an installer is launched, exit so the new build can take over cleanly.
+    if not headless_smoke:
+        try:
+            from .update_checker import check_for_update
+
+            if check_for_update(None, get_app_version()):
+                return 0
+        except Exception:
+            pass
+
     backend_url, should_start_local, should_prompt = _resolve_backend_target()
 
+    # Show the connection/setup dialog only after the update gate has passed.
     if should_prompt or os.environ.get("TRADEDESK_CONFIGURE_CONNECTION") or "--configure-connection" in sys.argv[1:]:
         dialog = ConnectionSetupDialog(backend_url)
         if dialog.exec() == QDialog.Accepted:
@@ -546,19 +586,6 @@ def main() -> int:
                 clear_connection_settings()
         else:
             return 0
-
-    load_styles(app, project_root)
-
-    # Check for updates before starting any backend or opening the login window.
-    # If an installer is launched, exit so the new build can take over cleanly.
-    if not headless_smoke:
-        try:
-            from .update_checker import check_for_update
-
-            if check_for_update(None, get_app_version()):
-                return 0
-        except Exception:
-            pass
 
     backend_proc = start_backend(project_root) if should_start_local else None
 
