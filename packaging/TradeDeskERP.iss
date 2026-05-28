@@ -46,6 +46,7 @@ var
 	DeploymentSummaryLabel: TNewStaticText;
 	DeleteUserDataPage: TWizardPage;
 	DeleteUserDataCheckbox: TNewCheckBox;
+	DeleteUserDataChoice: Boolean;
 
 function UserDataRoot: string;
 begin
@@ -136,7 +137,8 @@ end;
 
 function InitializeUninstall(): Boolean;
 begin
-	CreateUninstallOptionsPage;
+	// Do not create custom pages during uninstall (unsupported); use a confirmation prompt instead.
+	DeleteUserDataChoice := False;
 	Result := True;
 end;
 
@@ -163,12 +165,20 @@ var
 	DeleteUserData: Boolean;
 	UserDataPath: string;
 begin
+	if CurUninstallStep = usUninstall then
+	begin
+		// Ask user whether to delete all TradeDesk user data now that uninstall is running
+		if MsgBox('Delete all TradeDesk user data (logs, backups, settings) from this PC?', mbConfirmation, MB_YESNO) = IDYES then
+			DeleteUserDataChoice := True
+		else
+			DeleteUserDataChoice := False;
+		Exit;
+	end;
+
 	if CurUninstallStep <> usPostUninstall then
 		Exit;
 
-	DeleteUserData := Assigned(DeleteUserDataCheckbox) and DeleteUserDataCheckbox.Checked;
-
-	if not DeleteUserData then
+	if not DeleteUserDataChoice then
 		Exit;
 
 	UserDataPath := UserDataRoot;
