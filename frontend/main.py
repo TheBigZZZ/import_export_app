@@ -554,11 +554,24 @@ def main() -> int:
     else:
         project_root = Path(__file__).resolve().parents[1]
 
+    import tempfile as _tempfile
+    _debug_log = Path(_tempfile.gettempdir()) / "tradedesk-frontend-debug.log"
+    def _dbg(msg: str) -> None:
+        try:
+            _debug_log.parent.mkdir(parents=True, exist_ok=True)
+            with _debug_log.open("a", encoding="utf-8") as fh:
+                fh.write(f"{datetime.now().isoformat()} - {msg}\n")
+        except Exception:
+            pass
+
+    _dbg("starting main")
+
     app = QApplication(sys.argv)
     headless_smoke = _is_truthy(os.environ.get("TRADEDESK_HEADLESS_SMOKE"))
 
     # Load styles before showing any dialogs so dialogs honor app stylesheet.
     load_styles(app, project_root)
+    _dbg("styles loaded")
 
     # Check for updates before showing the connection/setup dialog or starting any backend.
     # If an installer is launched, exit so the new build can take over cleanly.
@@ -567,11 +580,16 @@ def main() -> int:
             from .update_checker import check_for_update
 
             if check_for_update(None, get_app_version()):
+                _dbg("update accepted -> exiting")
                 return 0
         except Exception:
+            _dbg("update check failed or raised")
             pass
 
+    _dbg("update check completed")
+
     backend_url, should_start_local, should_prompt = _resolve_backend_target()
+    _dbg(f"resolved backend target: {backend_url}, should_start_local={should_start_local}, should_prompt={should_prompt}")
 
     # Show the connection/setup dialog only after the update gate has passed.
     if should_prompt or os.environ.get("TRADEDESK_CONFIGURE_CONNECTION") or "--configure-connection" in sys.argv[1:]:
@@ -588,6 +606,7 @@ def main() -> int:
             return 0
 
     backend_proc = start_backend(project_root) if should_start_local else None
+    _dbg(f"backend_proc set: {bool(backend_proc)}")
 
     if not should_start_local:
         try:

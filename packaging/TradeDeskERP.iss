@@ -174,6 +174,44 @@ begin
 			DeleteUserDataChoice := True
 		else
 			DeleteUserDataChoice := False;
+
+		// Attempt to stop any running backend process recorded by the PID file.
+		// This prevents the backend from continuing to run after uninstall.
+		var
+			PIDPath: string;
+			PIDStr: string;
+			PID: Integer;
+		begin
+			PIDPath := UserDataRoot + '\\backend.pid';
+			if FileExists(PIDPath) then
+			begin
+				PIDStr := Trim(ReadFile(PIDPath));
+				if PIDStr <> '' then
+				begin
+					try
+						PID := StrToInt(PIDStr);
+						// Best-effort: try to terminate the process via taskkill.
+						if Exec('taskkill', '/PID ' + IntToStr(PID) + ' /F /T', '', SW_HIDE, ewWaitUntilTerminated, ResultCode) then
+						begin
+							// Remove PID file after successful kill
+							if FileExists(PIDPath) then
+								DeleteFile(PIDPath);
+						end
+						else
+						begin
+							// If taskkill failed, still attempt to delete PID file to avoid stale state.
+							if FileExists(PIDPath) then
+								DeleteFile(PIDPath);
+						end;
+					except
+						// On any error, continue uninstall but ensure PID file removed if possible.
+						if FileExists(PIDPath) then
+							DeleteFile(PIDPath);
+					end;
+				end;
+			end;
+		end;
+
 		Exit;
 	end;
 
