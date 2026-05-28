@@ -21,11 +21,13 @@ try:
     from .app_version import get_app_version
     from .connection_settings import ConnectionSettings, clear_connection_settings, load_connection_settings, save_connection_settings
     from .error_messages import friendly_exception_message, friendly_http_error
+    from tradedesk.backend.config import settings as backend_settings
 except ImportError:
     from frontend.mainwindow import MainWindow
     from frontend.app_version import get_app_version
     from frontend.connection_settings import ConnectionSettings, clear_connection_settings, load_connection_settings, save_connection_settings
     from frontend.error_messages import friendly_exception_message, friendly_http_error
+    from tradedesk.backend.config import settings as backend_settings
 
 BACKEND_PORT = 8742
 BACKEND_STARTUP_TIMEOUT_SECONDS = 90
@@ -59,6 +61,16 @@ def _resolve_backend_target() -> tuple[str, bool, bool]:
                 backend_url = f"http://{backend_url}"
             is_local = backend_url.startswith("http://127.0.0.1") or backend_url.startswith("http://localhost")
             return backend_url.rstrip("/"), is_local, False
+
+    # If a local database already exists, assume this is a relaunch of a
+    # previously configured local install and skip the connection chooser.
+    # This avoids re-showing setup after a normal close or crash when the
+    # user intentionally chose not to remember the host URL.
+    try:
+        if backend_settings.db_path.exists() and not args.configure_connection and not os.environ.get("TRADEDESK_CONFIGURE_CONNECTION"):
+            return f"http://127.0.0.1:{BACKEND_PORT}", True, False
+    except Exception:
+        pass
 
     if _is_truthy(os.environ.get("TRADEDESK_HEADLESS_SMOKE")):
         return f"http://127.0.0.1:{BACKEND_PORT}", True, False

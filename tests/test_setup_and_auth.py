@@ -99,3 +99,25 @@ async def test_login_with_created_admin(empty_db_client: httpx.AsyncClient) -> N
     user = me.json()
     assert user["username"] == "owner2"
     assert user["role"] == "super_admin"
+
+
+@pytest.mark.asyncio
+async def test_login_lockout_reports_unlock_time(empty_db_client: httpx.AsyncClient) -> None:
+    payload = {
+        "full_name": "Lockout Admin",
+        "username": "locked_admin",
+        "email": "locked@example.com",
+        "password": "L0cked$Pass",
+        "role": "super_admin",
+    }
+    create = await empty_db_client.post("/api/setup", json=payload)
+    assert create.status_code == 201
+
+    for _ in range(5):
+        bad = await empty_db_client.post("/api/auth/login", json={"username": "locked_admin", "password": "wrong-password"})
+        assert bad.status_code == 401
+
+    locked = await empty_db_client.post("/api/auth/login", json={"username": "locked_admin", "password": "L0cked$Pass"})
+    assert locked.status_code == 423
+    body = locked.json()
+    assert any("locked until" in str(body.get(key, "")).lower() for key in ("detail", "message", "error"))

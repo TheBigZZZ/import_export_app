@@ -19,8 +19,19 @@ class AuthService:
         if not user or not user.is_active:
             raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Invalid credentials")
 
-        if user.locked_until and user.locked_until > datetime.now(UTC):
-            raise HTTPException(status_code=status.HTTP_423_LOCKED, detail="Account is temporarily locked")
+        if user.locked_until:
+            locked_until_dt = user.locked_until
+            if locked_until_dt.tzinfo is None:
+                locked_until_dt = locked_until_dt.replace(tzinfo=UTC)
+            else:
+                locked_until_dt = locked_until_dt.astimezone(UTC)
+
+            if locked_until_dt > datetime.now(UTC):
+                locked_until = locked_until_dt.strftime("%Y-%m-%d %H:%M:%S UTC")
+                raise HTTPException(
+                    status_code=status.HTTP_423_LOCKED,
+                    detail=f"Account is temporarily locked until {locked_until}.",
+                )
 
         if not verify_password(payload.password, user.password_hash):
             await self.users.register_failed_login(
