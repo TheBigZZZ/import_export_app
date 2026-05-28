@@ -48,7 +48,9 @@ class DataTable(QWidget):
         self.table.setVerticalScrollMode(QAbstractItemView.ScrollMode.ScrollPerPixel)
         self.table.horizontalHeader().setDefaultAlignment(Qt.AlignmentFlag.AlignLeft | Qt.AlignmentFlag.AlignVCenter)
         self.table.horizontalHeader().setMinimumSectionSize(72)
-        self.table.verticalHeader().setDefaultSectionSize(28)
+        # Default uniform row height (pixels). Keep reasonable for compact lists.
+        self._default_row_height = 28
+        self.table.verticalHeader().setDefaultSectionSize(self._default_row_height)
         self.search_box.textChanged.connect(self._apply_filter)
         self.clear_button.clicked.connect(self.clear)
         self._raw_rows: list[list[str]] = []
@@ -85,6 +87,12 @@ class DataTable(QWidget):
                 if value.replace(",", "").replace(".", "").isdigit():
                     item.setTextAlignment(Qt.AlignRight | Qt.AlignVCenter)
                 self.table.setItem(r_index, c_index, item)
+            # Enforce a uniform row height for each rendered row to avoid
+            # platform-dependent variable heights and to keep layout stable.
+            try:
+                self.table.setRowHeight(r_index, self._default_row_height)
+            except Exception:
+                pass
         self._apply_column_sizing()
         self.table.setSortingEnabled(sorting)
 
