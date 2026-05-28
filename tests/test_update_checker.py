@@ -83,8 +83,10 @@ def test_update_workflow_downloads_verifies_and_launches(tmp_path, monkeypatch):
     assert launched["launching"] is True
     assert popen_calls
     expected_path = tmp_path / "tradedesk-update-1.2.3-TradeDeskERP-Setup.exe"
-    assert popen_calls[0][0] == [str(expected_path)]
-    assert popen_calls[0][1] is False
+    if update_checker.os.name == "nt":
+        assert popen_calls == [([str(expected_path)], False)]
+    else:
+        assert popen_calls == [(["chmod", "+x", str(expected_path)], False), ([str(expected_path)], False)]
     assert expected_path.read_bytes() == installer_bytes
 
 
