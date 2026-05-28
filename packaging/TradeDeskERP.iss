@@ -141,8 +141,7 @@ begin
 		Top := ScaleY(124);
 		Width := DeploymentPage.Surface.ClientWidth;
 		AutoSize := False;
-		WordWrap := True;
-		Caption := '';
+		Caption := 'Choose local backend if this PC will host TradeDesk.'#13#10'Choose shared backend if another machine already runs the backend service.';
 	end;
 
 	UpdateDeploymentControls(nil);
@@ -163,10 +162,9 @@ begin
 		Left := ScaleX(0);
 		Top := ScaleY(8);
 		Width := DeleteUserDataPage.Surface.ClientWidth;
-		Height := ScaleY(40);
-		Caption := 'Delete all TradeDesk user data, backups, logs, diagnostics, and local settings from this PC';
+		Height := ScaleY(20);
+		Caption := 'Delete all TradeDesk user data from this PC';
 		Checked := False;
-		WordWrap := True;
 	end;
 end;
 
