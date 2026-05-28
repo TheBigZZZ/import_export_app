@@ -8,6 +8,14 @@ import sys
 def run() -> int:
     multiprocessing.freeze_support()
 
+    # In CI smoke mode the packaged executable should behave as a backend-only
+    # process so the health endpoint is exercised directly instead of going
+    # through the GUI wrapper and a second spawned child process.
+    if os.environ.get("TRADEDESK_HEADLESS_SMOKE"):
+        from tradedesk.backend.cli import main as backend_cli_main
+
+        return backend_cli_main(["--serve"])
+
     # Allow the frozen executable to act as a backend worker when launched by
     # the GUI host. Use an explicit environment flag first because some frozen
     # Windows launch paths can mangle command-line handling before Python sees it.

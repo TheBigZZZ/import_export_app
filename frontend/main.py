@@ -693,8 +693,18 @@ def main() -> int:
 
     _dbg("starting main")
 
-    app = QApplication(sys.argv)
     headless_smoke = _is_truthy(os.environ.get("TRADEDESK_HEADLESS_SMOKE"))
+
+    # In CI smoke mode, run the backend directly inside the packaged EXE.
+    # This avoids the GUI/bootstrap child-process chain and gives the smoke
+    # test a deterministic /health endpoint to probe.
+    if headless_smoke:
+        from tradedesk.backend.cli import main as backend_cli_main
+
+        _dbg("headless smoke -> serving backend directly")
+        return backend_cli_main(["--serve"])
+
+    app = QApplication(sys.argv)
 
     # Load styles before showing any dialogs so dialogs honor app stylesheet.
     load_styles(app, project_root)
