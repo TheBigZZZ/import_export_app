@@ -55,6 +55,7 @@ dist/TradeDeskERP-Setup.exe
 
 - The executable launches the backend and desktop frontend together.
 - Runtime data is stored under `%USERPROFILE%/TradeDesk`.
+- The Inno Setup installer now includes a TradeDesk-specific deployment page that seeds the first launch connection mode.
 - The Inno Setup uninstaller now offers an option to remove the full `%USERPROFILE%/TradeDesk` data tree in addition to the app install folder.
 - Re-run `alembic upgrade head` before packaging if database schema changed.
 
