@@ -365,6 +365,21 @@ class MainWindow(QMainWindow):
             except Exception:
                 pass
 
+    def switch_module(self, key: str) -> None:
+        widget = self.module_widgets.get(key)
+        button = self.module_buttons.get(key)
+        if widget is None or button is None:
+            return
+
+        self.current_module_key = key
+        self.stack.setCurrentWidget(widget)
+
+        for module_key, module_button in self.module_buttons.items():
+            module_button.setChecked(module_key == key)
+
+        self._safe_refresh_widget(widget)
+        self.statusBar().showMessage(f"Opened {button.text()}", 2000)
+
     def _apply_live_refresh(self) -> None:
         modules = set(self._pending_live_modules)
         self._pending_live_modules.clear()
