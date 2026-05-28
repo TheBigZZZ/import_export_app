@@ -332,7 +332,7 @@ class MainWindow(QMainWindow):
 
     def _modules_for_live_event(self, payload: dict) -> set[str]:
         table_name = str(payload.get("payload", {}).get("table_name") or "").lower()
-        modules = {"dashboard", "reports", self.current_module_key}
+        modules = {"dashboard", "reports"}
         if not table_name:
             return modules
 
@@ -427,10 +427,6 @@ class MainWindow(QMainWindow):
             widget = self.module_widgets.get(key)
             if widget is not None:
                 self._safe_refresh_widget(widget)
-
-        current_widget = self.stack.currentWidget()
-        if current_widget is not None:
-            self._safe_refresh_widget(current_widget)
 
     def _start_live_monitor(self) -> None:
         try:
