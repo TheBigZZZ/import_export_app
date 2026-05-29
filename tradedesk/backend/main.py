@@ -16,6 +16,36 @@ from starlette.middleware.base import BaseHTTPMiddleware
 from starlette.requests import Request
 from starlette.responses import Response
 
+from . import cli as backend_cli
+from .admin import router as admin_router
+from .audit import register_audit_listeners
+from .bootstrap import seed_defaults
+from .config import settings
+from .database import AsyncSessionLocal
+from .diagnostics import purge_old_diagnostics
+from .diagnostics import router as diagnostics_router
+from .routes import (
+    accounts,
+    auth,
+    banks,
+    cash,
+    customers,
+    exchange_rates,
+    expenses,
+    imports,
+    live,
+    products,
+    purchases,
+    reports,
+    roles,
+    sales,
+)
+from .routes import settings as app_settings
+from .routes import setup, suppliers, users, vouchers
+from .services.exchange_rate_service import ExchangeRateService
+from .startup_checks import run_startup_safety_checks
+from .utils.logging_config import flush_logging_handlers, set_correlation_id, setup_logging
+
 # Import optional structured-logging support dynamically to avoid static
 # missing-import diagnostics in development environments that don't have
 # `pythonjsonlogger` installed. Use importlib so static checkers don't
@@ -26,21 +56,6 @@ try:  # pragma: no cover - optional dependency
     jsonlogger = getattr(_pj, "jsonlogger", _pj)
 except Exception:
     jsonlogger = None
-
-from . import cli as backend_cli
-from .admin import router as admin_router
-from .audit import register_audit_listeners
-from .bootstrap import seed_defaults
-from .config import settings
-from .database import AsyncSessionLocal
-from .diagnostics import purge_old_diagnostics
-from .diagnostics import router as diagnostics_router
-from .routes import accounts, auth, banks, cash, customers, exchange_rates, expenses, imports, live, products, purchases, reports, roles, sales
-from .routes import settings as app_settings
-from .routes import setup, suppliers, users, vouchers
-from .services.exchange_rate_service import ExchangeRateService
-from .startup_checks import run_startup_safety_checks
-from .utils.logging_config import flush_logging_handlers, set_correlation_id, setup_logging
 
 # Load optional Sentry SDK dynamically so missing dev/time packages don't
 # surface as static import errors in editors.
@@ -360,5 +375,4 @@ app.include_router(
 async def health() -> dict[str, str]:
     logger.debug("health: requested")
     return {"status": "ok"}
-
-
+# End of module.
