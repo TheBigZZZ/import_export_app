@@ -2,7 +2,7 @@
 
 from pathlib import Path
 
-from PyInstaller.utils.hooks import collect_submodules
+from PyInstaller.utils.hooks import collect_submodules, collect_data_files
 
 
 workspace = Path.cwd()
@@ -31,6 +31,13 @@ hiddenimports = collect_submodules("tradedesk") + collect_submodules("aiosqlite"
     "sentry_sdk",
 ]
 
+# Include aiosqlite package data explicitly (some installs place resources that
+# PyInstaller may not pick up via module analysis).
+try:
+    datas += collect_data_files("aiosqlite")
+except Exception:
+    pass
+
 
 a = Analysis(
     [str(workspace / "launcher.py")],
@@ -40,7 +47,7 @@ a = Analysis(
     hiddenimports=hiddenimports,
     hookspath=[],
     hooksconfig={},
-    runtime_hooks=[],
+    runtime_hooks=[str(workspace / "packaging" / "rth_aiosqlite.py")],
     excludes=[],
     noarchive=False,
     optimize=0,

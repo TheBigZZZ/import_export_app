@@ -1,6 +1,5 @@
 from __future__ import annotations
 
-import os
 from pathlib import Path
 
 import httpx
@@ -8,10 +7,8 @@ import pytest
 import pytest_asyncio
 from sqlalchemy.ext.asyncio import async_sessionmaker, create_async_engine
 
-from tradedesk.backend.main import app
 from tradedesk.backend.database import Base, get_db
-from tradedesk.backend.security import hash_password
-from tradedesk.backend.models.user import User
+from tradedesk.backend.main import app
 
 
 @pytest_asyncio.fixture
@@ -39,7 +36,9 @@ async def empty_db_client(tmp_path: Path):
 
 
 @pytest.mark.asyncio
-async def test_setup_status_and_create_initial_admin(empty_db_client: httpx.AsyncClient) -> None:
+async def test_setup_status_and_create_initial_admin(
+    empty_db_client: httpx.AsyncClient,
+) -> None:
     # No users initially
     resp = await empty_db_client.get("/api/setup/status")
     assert resp.status_code == 200
@@ -87,7 +86,9 @@ async def test_login_with_created_admin(empty_db_client: httpx.AsyncClient) -> N
     assert create.status_code == 201
 
     # Login
-    login = await empty_db_client.post("/api/auth/login", json={"username": "owner2", "password": "An0ther$Pass"})
+    login = await empty_db_client.post(
+        "/api/auth/login", json={"username": "owner2", "password": "An0ther$Pass"}
+    )
     assert login.status_code == 200
     tokens = login.json()
     assert "access_token" in tokens and "refresh_token" in tokens
@@ -102,7 +103,9 @@ async def test_login_with_created_admin(empty_db_client: httpx.AsyncClient) -> N
 
 
 @pytest.mark.asyncio
-async def test_login_lockout_reports_unlock_time(empty_db_client: httpx.AsyncClient) -> None:
+async def test_login_lockout_reports_unlock_time(
+    empty_db_client: httpx.AsyncClient,
+) -> None:
     payload = {
         "full_name": "Lockout Admin",
         "username": "locked_admin",
@@ -114,10 +117,18 @@ async def test_login_lockout_reports_unlock_time(empty_db_client: httpx.AsyncCli
     assert create.status_code == 201
 
     for _ in range(5):
-        bad = await empty_db_client.post("/api/auth/login", json={"username": "locked_admin", "password": "wrong-password"})
+        bad = await empty_db_client.post(
+            "/api/auth/login",
+            json={"username": "locked_admin", "password": "wrong-password"},
+        )
         assert bad.status_code == 401
 
-    locked = await empty_db_client.post("/api/auth/login", json={"username": "locked_admin", "password": "L0cked$Pass"})
+    locked = await empty_db_client.post(
+        "/api/auth/login", json={"username": "locked_admin", "password": "L0cked$Pass"}
+    )
     assert locked.status_code == 423
     body = locked.json()
-    assert any("locked until" in str(body.get(key, "")).lower() for key in ("detail", "message", "error"))
+    assert any(
+        "locked until" in str(body.get(key, "")).lower()
+        for key in ("detail", "message", "error")
+    )

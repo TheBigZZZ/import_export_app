@@ -1,4 +1,6 @@
-from . import accounts, auth, banks, cash, customers, expenses, imports, products, purchases, reports, sales, settings, suppliers, users, vouchers, setup
+from . import (accounts, auth, banks, cash, customers, expenses, imports,
+               products, purchases, reports, sales, settings, setup, suppliers,
+               users, vouchers)
 
 __all__ = [
     "auth",

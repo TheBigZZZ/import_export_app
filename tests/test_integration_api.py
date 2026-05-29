@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import asyncio
+import os
 from decimal import Decimal
 from pathlib import Path
 
@@ -9,12 +10,10 @@ import pytest
 import pytest_asyncio
 from sqlalchemy.ext.asyncio import async_sessionmaker, create_async_engine
 
-import os
-
 from tradedesk.backend.bootstrap import DEFAULT_ACCOUNTS
 from tradedesk.backend.config import settings
 from tradedesk.backend.database import Base, get_db
-from tradedesk.backend.live import LiveEvent, broker, broadcast_live_event
+from tradedesk.backend.live import LiveEvent, broadcast_live_event, broker
 from tradedesk.backend.main import app
 from tradedesk.backend.models.account import ChartOfAccount
 from tradedesk.backend.models.user import User
@@ -53,7 +52,9 @@ async def integration_client(tmp_path: Path):
             username="admin",
             email=None,
             # Use environment-driven test admin password when set, otherwise use a safe default for local tests
-            password_hash=hash_password(os.environ.get('TRADEDESK_TEST_ADMIN_PASS', 'TestPassw0rd!')),
+            password_hash=hash_password(
+                os.environ.get("TRADEDESK_TEST_ADMIN_PASS", "TestPassw0rd!")
+            ),
             role="super_admin",
             is_active=True,
         )
@@ -92,14 +93,18 @@ async def integration_client(tmp_path: Path):
 
 async def _auth_headers(client: httpx.AsyncClient) -> dict[str, str]:
     # Use the same test password as the fixture (env var overrides default)
-    test_pass = os.environ.get('TRADEDESK_TEST_ADMIN_PASS', 'TestPassw0rd!')
-    response = await client.post("/api/auth/login", json={"username": "admin", "password": test_pass})
+    test_pass = os.environ.get("TRADEDESK_TEST_ADMIN_PASS", "TestPassw0rd!")
+    response = await client.post(
+        "/api/auth/login", json={"username": "admin", "password": test_pass}
+    )
     assert response.status_code == 200
     token = response.json()["access_token"]
     return {"Authorization": f"Bearer {token}"}
 
 
-async def _find_account_id(client: httpx.AsyncClient, headers: dict[str, str], account_code: str) -> int:
+async def _find_account_id(
+    client: httpx.AsyncClient, headers: dict[str, str], account_code: str
+) -> int:
     response = await client.get("/api/accounts", headers=headers)
     assert response.status_code == 200
     for account in response.json():
@@ -109,13 +114,19 @@ async def _find_account_id(client: httpx.AsyncClient, headers: dict[str, str], a
 
 
 @pytest.mark.asyncio
-async def test_sales_purchase_posting_and_reports_flow(integration_client: httpx.AsyncClient) -> None:
+async def test_sales_purchase_posting_and_reports_flow(
+    integration_client: httpx.AsyncClient,
+) -> None:
     headers = await _auth_headers(integration_client)
 
     customer_response = await integration_client.post(
         "/api/customers",
         headers=headers,
-        json={"customer_code": "C001", "customer_name": "Retail Customer", "opening_balance": "0.00"},
+        json={
+            "customer_code": "C001",
+            "customer_name": "Retail Customer",
+            "opening_balance": "0.00",
+        },
     )
     assert customer_response.status_code == 201
     customer_id = customer_response.json()["id"]
@@ -123,7 +134,11 @@ async def test_sales_purchase_posting_and_reports_flow(integration_client: httpx
     supplier_response = await integration_client.post(
         "/api/suppliers",
         headers=headers,
-        json={"supplier_code": "S001", "supplier_name": "Global Supplier", "opening_balance": "0.00"},
+        json={
+            "supplier_code": "S001",
+            "supplier_name": "Global Supplier",
+            "opening_balance": "0.00",
+        },
     )
     assert supplier_response.status_code == 201
     supplier_id = supplier_response.json()["id"]
@@ -150,13 +165,17 @@ async def test_sales_purchase_posting_and_reports_flow(integration_client: httpx
             "po_no": "PO-INT-001",
             "supplier_id": supplier_id,
             "order_date": "2026-05-25",
-            "items": [{"product_id": product_id, "quantity": "10", "unit_price": "5.00"}],
+            "items": [
+                {"product_id": product_id, "quantity": "10", "unit_price": "5.00"}
+            ],
         },
     )
     assert purchase_create.status_code == 200
     purchase_id = purchase_create.json()["id"]
 
-    purchase_post = await integration_client.post(f"/api/purchases/{purchase_id}/post", headers=headers, json={})
+    purchase_post = await integration_client.post(
+        f"/api/purchases/{purchase_id}/post", headers=headers, json={}
+    )
     assert purchase_post.status_code == 200
     assert purchase_post.json()["status"] == "received"
 
@@ -167,21 +186,34 @@ async def test_sales_purchase_posting_and_reports_flow(integration_client: httpx
             "invoice_no": "INV-INT-001",
             "customer_id": customer_id,
             "invoice_date": "2026-05-25",
-            "items": [{"product_id": product_id, "quantity": "3", "unit_price": "9.00", "cost_price": "5.00"}],
+            "items": [
+                {
+                    "product_id": product_id,
+                    "quantity": "3",
+                    "unit_price": "9.00",
+                    "cost_price": "5.00",
+                }
+            ],
         },
     )
     assert sales_create.status_code == 200
     invoice_id = sales_create.json()["id"]
 
-    sales_post = await integration_client.post(f"/api/sales/{invoice_id}/post", headers=headers, json={})
+    sales_post = await integration_client.post(
+        f"/api/sales/{invoice_id}/post", headers=headers, json={}
+    )
     assert sales_post.status_code == 200
     assert sales_post.json()["status"] == "issued"
 
-    stock_ledger = await integration_client.get(f"/api/products/{product_id}/ledger", headers=headers)
+    stock_ledger = await integration_client.get(
+        f"/api/products/{product_id}/ledger", headers=headers
+    )
     assert stock_ledger.status_code == 200
     assert Decimal(stock_ledger.json()["current_stock"]) == Decimal("7.0000")
 
-    trial_balance = await integration_client.get("/api/reports/trial-balance", headers=headers)
+    trial_balance = await integration_client.get(
+        "/api/reports/trial-balance", headers=headers
+    )
     assert trial_balance.status_code == 200
     assert trial_balance.json()["is_balanced"] is True
 
@@ -191,7 +223,9 @@ async def test_sales_purchase_posting_and_reports_flow(integration_client: httpx
 
 
 @pytest.mark.asyncio
-async def test_settings_and_backup_endpoints(integration_client: httpx.AsyncClient) -> None:
+async def test_settings_and_backup_endpoints(
+    integration_client: httpx.AsyncClient,
+) -> None:
     headers = await _auth_headers(integration_client)
 
     update_response = await integration_client.put(
@@ -208,7 +242,9 @@ async def test_settings_and_backup_endpoints(integration_client: httpx.AsyncClie
     assert update_response.status_code == 200
     assert update_response.json()["allow_negative_stock"] is True
 
-    backup_response = await integration_client.post("/api/settings/backups", headers=headers, json={})
+    backup_response = await integration_client.post(
+        "/api/settings/backups", headers=headers, json={}
+    )
     assert backup_response.status_code == 201
     backup_name = backup_response.json()["backup"]["file_name"]
 
@@ -218,7 +254,9 @@ async def test_settings_and_backup_endpoints(integration_client: httpx.AsyncClie
 
 
 @pytest.mark.asyncio
-async def test_negative_stock_guard_obeys_settings(integration_client: httpx.AsyncClient) -> None:
+async def test_negative_stock_guard_obeys_settings(
+    integration_client: httpx.AsyncClient,
+) -> None:
     headers = await _auth_headers(integration_client)
 
     product_response = await integration_client.post(
@@ -278,7 +316,9 @@ async def test_negative_stock_guard_obeys_settings(integration_client: httpx.Asy
     )
     assert out_movement_allowed.status_code == 201
 
-    office_expense_account_id = await _find_account_id(integration_client, headers, "5100")
+    office_expense_account_id = await _find_account_id(
+        integration_client, headers, "5100"
+    )
     expense_response = await integration_client.post(
         "/api/expenses",
         headers=headers,
@@ -320,6 +360,8 @@ async def test_live_broker_delivers_change_events() -> None:
 
 
 @pytest.mark.asyncio
-async def test_live_events_endpoint_requires_auth(integration_client: httpx.AsyncClient) -> None:
+async def test_live_events_endpoint_requires_auth(
+    integration_client: httpx.AsyncClient,
+) -> None:
     response = await integration_client.get("/api/live/events")
     assert response.status_code == 403

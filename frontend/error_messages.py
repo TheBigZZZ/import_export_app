@@ -30,7 +30,9 @@ def _extract_detail(response: httpx.Response) -> str:
                             location_list = list(location)
                             if location_list:
                                 field = str(location_list[-1])
-                        message = _normalize_text(item.get("msg") or item.get("message") or "Invalid value")
+                        message = _normalize_text(
+                            item.get("msg") or item.get("message") or "Invalid value"
+                        )
                         if field:
                             parts.append(f"{field}: {message}")
                         else:

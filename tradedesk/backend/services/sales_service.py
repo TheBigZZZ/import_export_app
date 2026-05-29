@@ -12,7 +12,8 @@ from ..models.product import Product
 from ..models.sales import SalesInvoice, SalesInvoiceItem, SalesInvoiceStatus
 from ..models.transaction import PartyType
 from ..schemas.inventory import StockMovementCreate
-from ..schemas.sales_ops import SalesInvoiceCreate, SalesInvoiceRead, SalesInvoiceItemRead, SalesPostResponse
+from ..schemas.sales_ops import (SalesInvoiceCreate, SalesInvoiceItemRead,
+                                 SalesInvoiceRead, SalesPostResponse)
 from ..schemas.voucher import VoucherCreate, VoucherLineIn
 from .product_service import ProductService
 from .voucher_service import VoucherService
@@ -21,7 +22,9 @@ MONEY = Decimal("0.01")
 
 
 def calculate_sales_subtotal(items: list[SalesInvoiceItem]) -> Decimal:
-    return sum((Decimal(item.line_total) for item in items), Decimal("0.00")).quantize(MONEY)
+    return sum((Decimal(item.line_total) for item in items), Decimal("0.00")).quantize(
+        MONEY
+    )
 
 
 class SalesService:
@@ -29,20 +32,31 @@ class SalesService:
         self.db = db
 
     async def _account_id(self, code: str) -> int:
-        row = await self.db.execute(select(ChartOfAccount).where(ChartOfAccount.account_code == code))
+        row = await self.db.execute(
+            select(ChartOfAccount).where(ChartOfAccount.account_code == code)
+        )
         account = row.scalar_one_or_none()
         if not account:
-            raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=f"Account {code} is not configured")
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail=f"Account {code} is not configured",
+            )
         return account.id
 
     async def list_invoices(self) -> list[SalesInvoiceRead]:
-        rows = await self.db.execute(select(SalesInvoice).order_by(SalesInvoice.invoice_date.desc(), SalesInvoice.id.desc()))
+        rows = await self.db.execute(
+            select(SalesInvoice).order_by(
+                SalesInvoice.invoice_date.desc(), SalesInvoice.id.desc()
+            )
+        )
         invoices = list(rows.scalars().all())
         return [await self._to_read(invoice) for invoice in invoices]
 
     async def _to_read(self, invoice: SalesInvoice) -> SalesInvoiceRead:
         item_rows = await self.db.execute(
-            select(SalesInvoiceItem).where(SalesInvoiceItem.invoice_id == invoice.id).order_by(SalesInvoiceItem.id.asc())
+            select(SalesInvoiceItem)
+            .where(SalesInvoiceItem.invoice_id == invoice.id)
+            .order_by(SalesInvoiceItem.id.asc())
         )
         items = [
             SalesInvoiceItemRead(
@@ -74,17 +88,28 @@ class SalesService:
             items=items,
         )
 
-    async def create_invoice(self, payload: SalesInvoiceCreate, created_by: int | None) -> SalesInvoiceRead:
-        customer_row = await self.db.execute(select(Customer).where(Customer.id == payload.customer_id))
+    async def create_invoice(
+        self, payload: SalesInvoiceCreate, created_by: int | None
+    ) -> SalesInvoiceRead:
+        customer_row = await self.db.execute(
+            select(Customer).where(Customer.id == payload.customer_id)
+        )
         if not customer_row.scalar_one_or_none():
-            raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Customer not found")
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND, detail="Customer not found"
+            )
 
         product_ids = [item.product_id for item in payload.items]
-        products = await self.db.execute(select(Product.id).where(Product.id.in_(product_ids)))
+        products = await self.db.execute(
+            select(Product.id).where(Product.id.in_(product_ids))
+        )
         existing = {row[0] for row in products.all()}
         missing = [pid for pid in product_ids if pid not in existing]
         if missing:
-            raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=f"Missing product(s): {missing}")
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail=f"Missing product(s): {missing}",
+            )
 
         invoice = SalesInvoice(
             invoice_no=payload.invoice_no,
@@ -106,7 +131,10 @@ class SalesService:
 
         subtotal = Decimal("0.00")
         for item in payload.items:
-            line_total = (Decimal(item.quantity) * Decimal(item.unit_price) - Decimal(item.discount)).quantize(MONEY)
+            line_total = (
+                Decimal(item.quantity) * Decimal(item.unit_price)
+                - Decimal(item.discount)
+            ).quantize(MONEY)
             subtotal += line_total
             self.db.add(
                 SalesInvoiceItem(
@@ -121,25 +149,40 @@ class SalesService:
             )
 
         invoice.subtotal = subtotal.quantize(MONEY)
-        invoice.total_amount = (invoice.subtotal + invoice.vat - invoice.discount).quantize(MONEY)
+        invoice.total_amount = (
+            invoice.subtotal + invoice.vat - invoice.discount
+        ).quantize(MONEY)
         invoice.due_amount = invoice.total_amount
 
         await self.db.commit()
         await self.db.refresh(invoice)
         return await self._to_read(invoice)
 
-    async def post_invoice(self, invoice_id: int, user_id: int | None, allow_negative_stock: bool = False) -> SalesPostResponse:
-        row = await self.db.execute(select(SalesInvoice).where(SalesInvoice.id == invoice_id))
+    async def post_invoice(
+        self, invoice_id: int, user_id: int | None, allow_negative_stock: bool = False
+    ) -> SalesPostResponse:
+        row = await self.db.execute(
+            select(SalesInvoice).where(SalesInvoice.id == invoice_id)
+        )
         invoice = row.scalar_one_or_none()
         if not invoice:
-            raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Sales invoice not found")
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND, detail="Sales invoice not found"
+            )
         if invoice.status != SalesInvoiceStatus.draft:
-            raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Only draft invoice can be posted")
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="Only draft invoice can be posted",
+            )
 
-        item_rows = await self.db.execute(select(SalesInvoiceItem).where(SalesInvoiceItem.invoice_id == invoice.id))
+        item_rows = await self.db.execute(
+            select(SalesInvoiceItem).where(SalesInvoiceItem.invoice_id == invoice.id)
+        )
         items = list(item_rows.scalars().all())
         if not items:
-            raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Invoice has no items")
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST, detail="Invoice has no items"
+            )
 
         product_service = ProductService(self.db)
         for item in items:
@@ -163,7 +206,9 @@ class SalesService:
         sales_account_id = await self._account_id("4000")
         vat_account_id = await self._account_id("2200")
 
-        sales_credit = (Decimal(invoice.total_amount) - Decimal(invoice.vat)).quantize(MONEY)
+        sales_credit = (Decimal(invoice.total_amount) - Decimal(invoice.vat)).quantize(
+            MONEY
+        )
         lines = [
             VoucherLineIn(
                 account_id=ar_account_id,
@@ -202,7 +247,9 @@ class SalesService:
         )
 
         invoice.status = SalesInvoiceStatus.issued
-        invoice.due_amount = Decimal(invoice.total_amount) - Decimal(invoice.paid_amount)
+        invoice.due_amount = Decimal(invoice.total_amount) - Decimal(
+            invoice.paid_amount
+        )
         await self.db.commit()
 
         return SalesPostResponse(

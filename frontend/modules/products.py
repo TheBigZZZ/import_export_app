@@ -1,9 +1,10 @@
 from __future__ import annotations
 
-import asyncio
+import os
 from datetime import date
 
-from PySide6.QtWidgets import QComboBox, QFormLayout, QGroupBox, QHBoxLayout, QLabel, QLineEdit, QMessageBox, QPushButton
+from PySide6.QtWidgets import (QComboBox, QFormLayout, QGroupBox, QHBoxLayout,
+                               QLabel, QLineEdit, QMessageBox, QPushButton)
 
 from ..widgets.data_table import DataTable
 from .base import BaseModuleWidget
@@ -80,26 +81,70 @@ class ProductsModule(BaseModuleWidget):
         self.layout().addWidget(self.table)
 
     def refresh(self) -> None:
-        try:
-            response = asyncio.run(self.api_client.get("/api/products"))
-            response.raise_for_status()
-            data = response.json()
-        except Exception as exc:
-            QMessageBox.warning(self, "Products", str(exc))
+        if os.environ.get("TRADEDESK_USE_QTASYNCIO"):
+
+            async def _async_fetch():
+                resp = await self.api_client.get("/api/products")
+                resp.raise_for_status()
+                return resp.json()
+
+            def _on_result(data):
+                try:
+                    rows = [
+                        [
+                            str(item["id"]),
+                            item["product_code"],
+                            item["product_name"],
+                            item["unit"],
+                            str(item.get("current_stock")),
+                            str(item.get("selling_price")),
+                        ]
+                        for item in data
+                    ]
+                    self.table.set_rows(
+                        ["ID", "Code", "Name", "Unit", "Stock", "Sell Price"],
+                        rows,
+                        stretch_columns={2},
+                    )
+                except Exception as exc:
+                    QMessageBox.warning(self, "Products", str(exc))
+
+            def _on_error(exc):
+                QMessageBox.warning(self, "Products", str(exc))
+
+            self.run_async(_async_fetch(), on_result=_on_result, on_error=_on_error)
             return
 
-        rows = [
-            [
-                str(item["id"]),
-                item["product_code"],
-                item["product_name"],
-                item["unit"],
-                str(item["current_stock"]),
-                str(item["selling_price"]),
-            ]
-            for item in data
-        ]
-        self.table.set_rows(["ID", "Code", "Name", "Unit", "Stock", "Sell Price"], rows, stretch_columns={2})
+        def _do_fetch():
+            resp = self.api_client.sync_get("/api/products")
+            resp.raise_for_status()
+            return resp.json()
+
+        def _on_result(data):
+            try:
+                rows = [
+                    [
+                        str(item["id"]),
+                        item["product_code"],
+                        item["product_name"],
+                        item["unit"],
+                        str(item.get("current_stock")),
+                        str(item.get("selling_price")),
+                    ]
+                    for item in data
+                ]
+                self.table.set_rows(
+                    ["ID", "Code", "Name", "Unit", "Stock", "Sell Price"],
+                    rows,
+                    stretch_columns={2},
+                )
+            except Exception as exc:
+                QMessageBox.warning(self, "Products", str(exc))
+
+        def _on_error(exc):
+            QMessageBox.warning(self, "Products", str(exc))
+
+        self.run_blocking(_do_fetch, on_result=_on_result, on_error=_on_error)
 
     def create_product(self) -> None:
         try:
@@ -116,18 +161,23 @@ class ProductsModule(BaseModuleWidget):
             "purchase_price": purchase_price,
             "selling_price": selling_price,
         }
-        try:
-            response = asyncio.run(self.api_client.post("/api/products", json=payload))
-            response.raise_for_status()
-        except Exception as exc:
-            QMessageBox.warning(self, "Create Product", str(exc))
-            return
 
-        self.code_input.clear()
-        self.name_input.clear()
-        self.purchase_price_input.setText("0")
-        self.selling_price_input.setText("0")
-        self.refresh()
+        def _do_create():
+            resp = self.api_client.sync_post("/api/products", json=payload)
+            resp.raise_for_status()
+            return resp
+
+        def _on_result(_):
+            self.code_input.clear()
+            self.name_input.clear()
+            self.purchase_price_input.setText("0")
+            self.selling_price_input.setText("0")
+            self.refresh()
+
+        def _on_error(exc):
+            QMessageBox.warning(self, "Create Product", str(exc))
+
+        self.run_blocking(_do_create, on_result=_on_result, on_error=_on_error)
 
     def post_movement(self) -> None:
         try:
@@ -141,32 +191,71 @@ class ProductsModule(BaseModuleWidget):
                 "document_status": self.status_input.text().strip() or "posted",
             }
         except ValueError:
-            QMessageBox.warning(self, "Stock Movement", "Enter valid numeric product, quantity, and cost")
+            QMessageBox.warning(
+                self,
+                "Stock Movement",
+                "Enter valid numeric product, quantity, and cost",
+            )
             return
 
-        try:
-            response = asyncio.run(self.api_client.post("/api/products/movements", json=payload))
-            response.raise_for_status()
-        except Exception as exc:
+        def _do_post():
+            resp = self.api_client.sync_post("/api/products/movements", json=payload)
+            resp.raise_for_status()
+            return resp
+
+        def _on_result(_):
+            self.quantity_input.clear()
+            self.unit_cost_input.setText("0")
+            self.doc_no_input.clear()
+            self.refresh()
+
+        def _on_error(exc):
             QMessageBox.warning(self, "Stock Movement", str(exc))
-            return
 
-        self.quantity_input.clear()
-        self.unit_cost_input.setText("0")
-        self.doc_no_input.clear()
-        self.refresh()
+        self.run_blocking(_do_post, on_result=_on_result, on_error=_on_error)
 
     def load_ledger(self) -> None:
         product_id = self.ledger_id_input.text().strip()
         if not product_id.isdigit():
-            QMessageBox.warning(self, "Stock Ledger", "Enter a valid numeric product ID")
+            QMessageBox.warning(
+                self, "Stock Ledger", "Enter a valid numeric product ID"
+            )
             return
-        try:
-            response = asyncio.run(self.api_client.get(f"/api/products/{product_id}/ledger"))
-            response.raise_for_status()
-            data = response.json()
-        except Exception as exc:
-            QMessageBox.warning(self, "Stock Ledger", str(exc))
+        if os.environ.get("TRADEDESK_USE_QTASYNCIO"):
+
+            async def _async_load():
+                resp = await self.api_client.get(f"/api/products/{product_id}/ledger")
+                resp.raise_for_status()
+                return resp.json()
+
+            def _on_result(data):
+                try:
+                    self.ledger_summary.setText(
+                        f"Current stock: {data['current_stock']} | Ledger lines: {len(data['entries'])}"
+                    )
+                except Exception as exc:
+                    QMessageBox.warning(self, "Stock Ledger", str(exc))
+
+            def _on_error(exc):
+                QMessageBox.warning(self, "Stock Ledger", str(exc))
+
+            self.run_async(_async_load(), on_result=_on_result, on_error=_on_error)
             return
 
-        self.ledger_summary.setText(f"Current stock: {data['current_stock']} | Ledger lines: {len(data['entries'])}")
+        def _do_load():
+            resp = self.api_client.sync_get(f"/api/products/{product_id}/ledger")
+            resp.raise_for_status()
+            return resp.json()
+
+        def _on_result(data):
+            try:
+                self.ledger_summary.setText(
+                    f"Current stock: {data['current_stock']} | Ledger lines: {len(data['entries'])}"
+                )
+            except Exception as exc:
+                QMessageBox.warning(self, "Stock Ledger", str(exc))
+
+        def _on_error(exc):
+            QMessageBox.warning(self, "Stock Ledger", str(exc))
+
+        self.run_blocking(_do_load, on_result=_on_result, on_error=_on_error)

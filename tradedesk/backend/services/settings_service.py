@@ -9,8 +9,8 @@ from pathlib import Path
 from fastapi import HTTPException, status
 
 from ..config import settings
-from ..utils.secret_store import get_secret, set_secret, delete_secret
 from ..database import engine
+from ..utils.secret_store import delete_secret, get_secret, set_secret
 
 
 @dataclass
@@ -48,18 +48,25 @@ class SettingsService:
             defaults = self._default_settings()
             settings_path.write_text(json.dumps(defaults, indent=2), encoding="utf-8")
             # Add a flag indicating whether SMTP password is configured in secret store
-            defaults["diagnostics_smtp_password_set"] = bool(get_secret("diagnostics_smtp_password"))
+            defaults["diagnostics_smtp_password_set"] = bool(
+                get_secret("diagnostics_smtp_password")
+            )
             return defaults
 
         try:
             loaded = json.loads(settings_path.read_text(encoding="utf-8"))
         except json.JSONDecodeError as exc:
-            raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail="Invalid settings file") from exc
+            raise HTTPException(
+                status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+                detail="Invalid settings file",
+            ) from exc
 
         defaults = self._default_settings()
         defaults.update(loaded)
         # Do not expose SMTP password; instead expose a boolean flag
-        defaults["diagnostics_smtp_password_set"] = bool(get_secret("diagnostics_smtp_password"))
+        defaults["diagnostics_smtp_password_set"] = bool(
+            get_secret("diagnostics_smtp_password")
+        )
         # Clean any sensitive payload accidentally stored
         if "diagnostics_smtp_password" in defaults:
             defaults.pop("diagnostics_smtp_password")
@@ -76,14 +83,20 @@ class SettingsService:
                 set_secret("diagnostics_smtp_password", str(val))
 
         current.update(payload)
-        self._settings_path().write_text(json.dumps(current, indent=2), encoding="utf-8")
+        self._settings_path().write_text(
+            json.dumps(current, indent=2), encoding="utf-8"
+        )
         # Ensure response includes password-set flag
-        current["diagnostics_smtp_password_set"] = bool(get_secret("diagnostics_smtp_password"))
+        current["diagnostics_smtp_password_set"] = bool(
+            get_secret("diagnostics_smtp_password")
+        )
         return current
 
     def list_backups(self) -> list[BackupFile]:
         backups: list[BackupFile] = []
-        for file_path in sorted(settings.backup_dir.glob("tradedesk_backup_*.db"), reverse=True):
+        for file_path in sorted(
+            settings.backup_dir.glob("tradedesk_backup_*.db"), reverse=True
+        ):
             stat = file_path.stat()
             backups.append(
                 BackupFile(
@@ -97,7 +110,9 @@ class SettingsService:
 
     def create_backup(self) -> BackupFile:
         if not settings.db_path.exists():
-            raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Database file not found")
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND, detail="Database file not found"
+            )
         # Use centralized backup helper which also applies retention
         try:
             from ..backup import backup_db
@@ -119,11 +134,16 @@ class SettingsService:
 
     async def restore_backup(self, file_name: str) -> BackupFile:
         if "/" in file_name or "\\" in file_name or ".." in file_name:
-            raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Invalid backup file name")
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="Invalid backup file name",
+            )
 
         backup_path = settings.backup_dir / file_name
         if not backup_path.exists() or not backup_path.is_file():
-            raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Backup file not found")
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND, detail="Backup file not found"
+            )
 
         await engine.dispose()
         shutil.copy2(backup_path, settings.db_path)

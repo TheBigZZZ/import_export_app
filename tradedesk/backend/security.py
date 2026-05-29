@@ -9,7 +9,9 @@ from .config import settings
 
 def hash_password(raw_password: str) -> str:
     rounds = settings.bcrypt_rounds
-    return bcrypt.hashpw(raw_password.encode("utf-8"), bcrypt.gensalt(rounds=rounds)).decode("utf-8")
+    return bcrypt.hashpw(
+        raw_password.encode("utf-8"), bcrypt.gensalt(rounds=rounds)
+    ).decode("utf-8")
 
 
 def verify_password(raw_password: str, hashed_password: str) -> bool:
@@ -21,7 +23,9 @@ def create_access_token(subject: str, extra: dict[str, Any] | None = None) -> st
     payload: dict[str, Any] = {"sub": subject, "type": "access", "exp": expire}
     if extra:
         payload.update(extra)
-    return jwt.encode(payload, settings.jwt_secret_key, algorithm=settings.jwt_algorithm)
+    return jwt.encode(
+        payload, settings.jwt_secret_key, algorithm=settings.jwt_algorithm
+    )
 
 
 def create_refresh_token(subject: str, extra: dict[str, Any] | None = None) -> str:
@@ -29,12 +33,16 @@ def create_refresh_token(subject: str, extra: dict[str, Any] | None = None) -> s
     payload: dict[str, Any] = {"sub": subject, "type": "refresh", "exp": expire}
     if extra:
         payload.update(extra)
-    return jwt.encode(payload, settings.jwt_secret_key, algorithm=settings.jwt_algorithm)
+    return jwt.encode(
+        payload, settings.jwt_secret_key, algorithm=settings.jwt_algorithm
+    )
 
 
 def decode_token(token: str) -> dict[str, Any]:
     try:
-        payload = jwt.decode(token, settings.jwt_secret_key, algorithms=[settings.jwt_algorithm])
+        payload = jwt.decode(
+            token, settings.jwt_secret_key, algorithms=[settings.jwt_algorithm]
+        )
     except JWTError as exc:
         raise ValueError("Invalid token") from exc
     return payload

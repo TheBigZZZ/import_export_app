@@ -20,9 +20,16 @@ class StartupConfigSnapshot:
     access_token_expire_minutes: int
 
 
-def evaluate_static_startup_checks(snapshot: StartupConfigSnapshot) -> tuple[list[str], list[str]]:
+def evaluate_static_startup_checks(
+    snapshot: StartupConfigSnapshot,
+) -> tuple[list[str], list[str]]:
     errors: list[str] = []
     warnings: list[str] = []
+
+    try:
+        from .config import settings as _settings
+    except Exception:
+        _settings = None
 
     env = snapshot.environment.strip().lower()
     is_production = env == "production"
@@ -38,34 +45,78 @@ def evaluate_static_startup_checks(snapshot: StartupConfigSnapshot) -> tuple[lis
     if is_production and snapshot.bcrypt_rounds < 12:
         errors.append("TRADEDESK_BCRYPT_ROUNDS must be >= 12 in production")
 
+    if is_production and _settings and _settings.diagnostics_allow_self_register:
+        errors.append(
+            "TRADEDESK_DIAGNOSTICS_ALLOW_SELF_REGISTER must be false in production"
+        )
+    elif _settings and _settings.diagnostics_allow_self_register:
+        warnings.append(
+            "Diagnostics self-registration is enabled; verify install secrets are protected"
+        )
+
     if snapshot.access_token_expire_minutes > 60 * 24:
         warnings.append("Access token expiry exceeds 24 hours")
-
-    # Diagnostics related checks
-    try:
-        from .config import settings as _settings
-    except Exception:
-        _settings = None
 
     if _settings:
         if _settings.diagnostics_enabled:
             if is_production and not _settings.diagnostics_admin_key:
-                errors.append("Diagnostics enabled in production but TRADEDESK_DIAGNOSTICS_ADMIN_KEY is not set")
+                errors.append(
+                    "Diagnostics enabled in production but TRADEDESK_DIAGNOSTICS_ADMIN_KEY is not set"
+                )
             elif not _settings.diagnostics_admin_key:
-                warnings.append("Diagnostics admin key not configured; self-registration may be limited")
+                warnings.append(
+                    "Diagnostics admin key not configured; self-registration may be limited"
+                )
 
             if is_production and _settings.diagnostics_notify_via_email:
-                missing_smtp = [k for k in ("diagnostics_smtp_host", "diagnostics_smtp_user", "diagnostics_smtp_password") if not getattr(_settings, k)]
+                missing_smtp = [
+                    k
+                    for k in (
+                        "diagnostics_smtp_host",
+                        "diagnostics_smtp_user",
+                        "diagnostics_smtp_password",
+                    )
+                    if not getattr(_settings, k)
+                ]
                 if missing_smtp:
-                    errors.append("Diagnostics email notifications are enabled but SMTP settings are missing: %s" % ",".join(missing_smtp))
+                    errors.append(
+                        (
+                            "Diagnostics email notifications are enabled but SMTP "
+                            "settings are missing: %s"
+                            % ",".join(missing_smtp)
+                        )
+                    )
             elif _settings.diagnostics_notify_via_email:
-                missing = [k for k in ("diagnostics_smtp_host", "diagnostics_smtp_user", "diagnostics_smtp_password") if not getattr(_settings, k)]
+                missing = [
+                    k
+                    for k in (
+                        "diagnostics_smtp_host",
+                        "diagnostics_smtp_user",
+                        "diagnostics_smtp_password",
+                    )
+                    if not getattr(_settings, k)
+                ]
                 if missing:
-                    warnings.append("Diagnostics email notifications configured but SMTP settings missing: %s" % ",".join(missing))
+                    warnings.append(
+                        (
+                            "Diagnostics email notifications configured but SMTP "
+                            "settings missing: %s"
+                            % ",".join(missing)
+                        )
+                    )
 
         # Nonce persistence recommended in production when diagnostics are enabled
-        if _settings.diagnostics_enabled and is_production and not _settings.diagnostics_nonces_dir:
-            errors.append("TRADEDESK_DIAGNOSTICS_NONCES_DIR must be set in production when diagnostics are enabled to prevent replay attacks")
+        if (
+            _settings.diagnostics_enabled
+            and is_production
+            and not _settings.diagnostics_nonces_dir
+        ):
+            errors.append(
+                (
+                    "TRADEDESK_DIAGNOSTICS_NONCES_DIR must be set in production "
+                    "when diagnostics are enabled to prevent replay attacks"
+                )
+            )
 
     return errors, warnings
 
@@ -82,8 +133,14 @@ def _snapshot_from_settings() -> StartupConfigSnapshot:
 
 async def ensure_database_schema_ready() -> bool:
     async with engine.connect() as conn:
-        table_names = await conn.run_sync(lambda sync_conn: set(inspect(sync_conn).get_table_names()))
-        missing = [table_name for table_name in REQUIRED_TABLES if table_name not in table_names]
+        table_names = await conn.run_sync(
+            lambda sync_conn: set(inspect(sync_conn).get_table_names())
+        )
+        missing = [
+            table_name
+            for table_name in REQUIRED_TABLES
+            if table_name not in table_names
+        ]
 
     # Do not auto-create schema when running in production. In production the
     # operator must run Alembic migrations explicitly (recommended) via the
@@ -106,7 +163,10 @@ async def run_startup_safety_checks() -> list[str]:
             # In production, fail fast and instruct operator to run migrations.
             if snapshot.environment.strip().lower() == "production":
                 raise RuntimeError(
-                    "Database schema is not initialized. Run 'tradedesk.backend.cli --init-db' or 'alembic upgrade head' before starting in production."
+                    (
+                        "Database schema is not initialized. Run 'tradedesk.backend.cli --init-db' "
+                        "or 'alembic upgrade head' before starting in production."
+                    )
                 )
             # In non-production environments we initialize automatically to
             # make first-run developer experience smoother.

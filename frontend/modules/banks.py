@@ -1,9 +1,10 @@
 from __future__ import annotations
 
-import asyncio
+import os
 from datetime import date
 
-from PySide6.QtWidgets import QFormLayout, QGroupBox, QHBoxLayout, QLineEdit, QMessageBox, QPushButton
+from PySide6.QtWidgets import (QFormLayout, QGroupBox, QHBoxLayout, QLineEdit,
+                               QMessageBox, QPushButton)
 
 from ..widgets.data_table import DataTable
 from .base import BaseModuleWidget
@@ -57,26 +58,70 @@ class BanksModule(BaseModuleWidget):
         self.layout().addWidget(self.table)
 
     def refresh(self) -> None:
-        try:
-            response = asyncio.run(self.api_client.get("/api/banks"))
-            response.raise_for_status()
-            data = response.json()
-        except Exception as exc:
-            QMessageBox.warning(self, "Banks", str(exc))
+        if os.environ.get("TRADEDESK_USE_QTASYNCIO"):
+
+            async def _async_fetch():
+                resp = await self.api_client.get("/api/banks")
+                resp.raise_for_status()
+                return resp.json()
+
+            def _on_result(data):
+                try:
+                    rows = [
+                        [
+                            str(item["id"]),
+                            item["bank_name"],
+                            item["account_name"],
+                            item["account_number"],
+                            str(item.get("current_balance")),
+                            item["currency"],
+                        ]
+                        for item in data
+                    ]
+                    self.table.set_rows(
+                        ["ID", "Bank", "Account", "Number", "Balance", "Currency"],
+                        rows,
+                        stretch_columns={2},
+                    )
+                except Exception as exc:
+                    QMessageBox.warning(self, "Banks", str(exc))
+
+            def _on_error(exc):
+                QMessageBox.warning(self, "Banks", str(exc))
+
+            self.run_async(_async_fetch(), on_result=_on_result, on_error=_on_error)
             return
 
-        rows = [
-            [
-                str(item["id"]),
-                item["bank_name"],
-                item["account_name"],
-                item["account_number"],
-                str(item["current_balance"]),
-                item["currency"],
-            ]
-            for item in data
-        ]
-        self.table.set_rows(["ID", "Bank", "Account", "Number", "Balance", "Currency"], rows, stretch_columns={2})
+        def _do_fetch():
+            resp = self.api_client.sync_get("/api/banks")
+            resp.raise_for_status()
+            return resp.json()
+
+        def _on_result(data):
+            try:
+                rows = [
+                    [
+                        str(item["id"]),
+                        item["bank_name"],
+                        item["account_name"],
+                        item["account_number"],
+                        str(item.get("current_balance")),
+                        item["currency"],
+                    ]
+                    for item in data
+                ]
+                self.table.set_rows(
+                    ["ID", "Bank", "Account", "Number", "Balance", "Currency"],
+                    rows,
+                    stretch_columns={2},
+                )
+            except Exception as exc:
+                QMessageBox.warning(self, "Banks", str(exc))
+
+        def _on_error(exc):
+            QMessageBox.warning(self, "Banks", str(exc))
+
+        self.run_blocking(_do_fetch, on_result=_on_result, on_error=_on_error)
 
     def create_bank(self) -> None:
         try:
@@ -90,13 +135,19 @@ class BanksModule(BaseModuleWidget):
             "account_number": self.account_number.text().strip(),
             "opening_balance": balance,
         }
-        try:
-            response = asyncio.run(self.api_client.post("/api/banks", json=payload))
-            response.raise_for_status()
-        except Exception as exc:
+
+        def _do_create():
+            resp = self.api_client.sync_post("/api/banks", json=payload)
+            resp.raise_for_status()
+            return resp
+
+        def _on_result(_):
+            self.refresh()
+
+        def _on_error(exc):
             QMessageBox.warning(self, "Create Bank", str(exc))
-            return
-        self.refresh()
+
+        self.run_blocking(_do_create, on_result=_on_result, on_error=_on_error)
 
     def transfer(self) -> None:
         try:
@@ -110,11 +161,16 @@ class BanksModule(BaseModuleWidget):
             QMessageBox.warning(self, "Transfer", "Enter valid numeric values")
             return
 
-        try:
-            response = asyncio.run(self.api_client.post("/api/banks/transfer", json=payload))
-            response.raise_for_status()
-        except Exception as exc:
+        def _do_transfer():
+            resp = self.api_client.sync_post("/api/banks/transfer", json=payload)
+            resp.raise_for_status()
+            return resp
+
+        def _on_result(_):
+            self.transfer_amount.clear()
+            self.refresh()
+
+        def _on_error(exc):
             QMessageBox.warning(self, "Transfer", str(exc))
-            return
-        self.transfer_amount.clear()
-        self.refresh()
+
+        self.run_blocking(_do_transfer, on_result=_on_result, on_error=_on_error)

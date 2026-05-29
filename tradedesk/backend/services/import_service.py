@@ -7,11 +7,13 @@ from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from ..models.account import ChartOfAccount
-from ..models.import_shipment import ImportShipment, ImportShipmentItem, ShipmentStatus
+from ..models.import_shipment import (ImportShipment, ImportShipmentItem,
+                                      ShipmentStatus)
 from ..models.product import Product
 from ..models.supplier import Supplier
 from ..models.transaction import PartyType
-from ..schemas.import_ops import ImportShipmentCreate, ImportShipmentItemRead, ImportShipmentRead, ImportPostResponse
+from ..schemas.import_ops import (ImportPostResponse, ImportShipmentCreate,
+                                  ImportShipmentItemRead, ImportShipmentRead)
 from ..schemas.inventory import StockMovementCreate
 from ..schemas.voucher import VoucherCreate, VoucherLineIn
 from .product_service import ProductService
@@ -25,14 +27,21 @@ class ImportService:
         self.db = db
 
     async def _account_id(self, code: str) -> int:
-        row = await self.db.execute(select(ChartOfAccount).where(ChartOfAccount.account_code == code))
+        row = await self.db.execute(
+            select(ChartOfAccount).where(ChartOfAccount.account_code == code)
+        )
         account = row.scalar_one_or_none()
         if not account:
-            raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=f"Account {code} is not configured")
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail=f"Account {code} is not configured",
+            )
         return account.id
 
     async def list_shipments(self) -> list[ImportShipmentRead]:
-        rows = await self.db.execute(select(ImportShipment).order_by(ImportShipment.id.desc()))
+        rows = await self.db.execute(
+            select(ImportShipment).order_by(ImportShipment.id.desc())
+        )
         return [await self._to_read(item) for item in rows.scalars().all()]
 
     async def _to_read(self, shipment: ImportShipment) -> ImportShipmentRead:
@@ -76,17 +85,28 @@ class ImportService:
             items=items,
         )
 
-    async def create_shipment(self, payload: ImportShipmentCreate, created_by: int | None) -> ImportShipmentRead:
-        supplier_row = await self.db.execute(select(Supplier).where(Supplier.id == payload.supplier_id))
+    async def create_shipment(
+        self, payload: ImportShipmentCreate, created_by: int | None
+    ) -> ImportShipmentRead:
+        supplier_row = await self.db.execute(
+            select(Supplier).where(Supplier.id == payload.supplier_id)
+        )
         if not supplier_row.scalar_one_or_none():
-            raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Supplier not found")
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND, detail="Supplier not found"
+            )
 
         product_ids = [item.product_id for item in payload.items]
-        products = await self.db.execute(select(Product.id).where(Product.id.in_(product_ids)))
+        products = await self.db.execute(
+            select(Product.id).where(Product.id.in_(product_ids))
+        )
         existing = {row[0] for row in products.all()}
         missing = [pid for pid in product_ids if pid not in existing]
         if missing:
-            raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=f"Missing product(s): {missing}")
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail=f"Missing product(s): {missing}",
+            )
 
         charges = (
             Decimal(payload.fob_cost)
@@ -142,18 +162,34 @@ class ImportService:
         await self.db.refresh(shipment)
         return await self._to_read(shipment)
 
-    async def post_shipment(self, shipment_id: int, user_id: int | None) -> ImportPostResponse:
-        row = await self.db.execute(select(ImportShipment).where(ImportShipment.id == shipment_id))
+    async def post_shipment(
+        self, shipment_id: int, user_id: int | None
+    ) -> ImportPostResponse:
+        row = await self.db.execute(
+            select(ImportShipment).where(ImportShipment.id == shipment_id)
+        )
         shipment = row.scalar_one_or_none()
         if not shipment:
-            raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Import shipment not found")
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail="Import shipment not found",
+            )
         if shipment.status == ShipmentStatus.posted:
-            raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Shipment already posted")
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="Shipment already posted",
+            )
 
-        item_rows = await self.db.execute(select(ImportShipmentItem).where(ImportShipmentItem.shipment_id == shipment.id))
+        item_rows = await self.db.execute(
+            select(ImportShipmentItem).where(
+                ImportShipmentItem.shipment_id == shipment.id
+            )
+        )
         items = list(item_rows.scalars().all())
         if not items:
-            raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Shipment has no items")
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST, detail="Shipment has no items"
+            )
 
         product_service = ProductService(self.db)
         computed_total = Decimal("0.00")

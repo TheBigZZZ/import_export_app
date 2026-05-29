@@ -1,50 +1,24 @@
 from __future__ import annotations
 
-import asyncio
-import json
+import os
 from dataclasses import dataclass
-from pathlib import Path
 
-from PySide6.QtCore import QEasingCurve, QPropertyAnimation, QTimer, Qt
-from PySide6.QtWidgets import (
-    QDialog,
-    QFormLayout,
-    QHBoxLayout,
-    QLabel,
-    QLineEdit,
-    QGraphicsOpacityEffect,
-    QMainWindow,
-    QMessageBox,
-    QPushButton,
-    QStackedWidget,
-    QStatusBar,
-    QTextBrowser,
-    QVBoxLayout,
-    QWidget,
-)
-
-import httpx
+from PySide6.QtCore import (QEasingCurve, QEventLoop, QPropertyAnimation, Qt,
+                            QThreadPool, QTimer, Signal)
+from PySide6.QtWidgets import (QDialog, QFormLayout, QGraphicsOpacityEffect,
+                               QHBoxLayout, QLabel, QLineEdit, QMainWindow,
+                               QPushButton, QStackedWidget, QStatusBar,
+                               QTextBrowser, QVBoxLayout, QWidget)
 
 from .api_client import ApiClient
-from .error_messages import friendly_exception_message, friendly_http_error
-from .live_updates import LiveUpdateMonitor
-from .modules import (
-    BanksModule,
-    CashRegisterModule,
-    ChartOfAccountsModule,
-    CustomersModule,
-    DashboardModule,
-    ExpensesModule,
-    ImportCostingModule,
-    ProductsModule,
-    PurchasesModule,
-    ReportsModule,
-    SalesModule,
-    SettingsModule,
-    SuppliersModule,
-    UsersModule,
-    VouchersModule,
-)
+from .error_messages import friendly_exception_message
+from .live_updates import AsyncLiveUpdateMonitor, LiveUpdateMonitor
+from .modules import (BanksModule, CashRegisterModule, ChartOfAccountsModule,
+                      CustomersModule, DashboardModule, ExpensesModule,
+                      ImportCostingModule, ProductsModule, PurchasesModule,
+                      ReportsModule, SalesModule, SettingsModule,
+                      SuppliersModule, UsersModule, VouchersModule)
+from .workers import Worker
 
 
 @dataclass
@@ -116,19 +90,41 @@ class SetupHelpDialog(QDialog):
 
         text = QTextBrowser(self)
         text.setOpenExternalLinks(True)
-        text.setHtml(
-            """
+        text.setHtml("""
             <h2>Recommended setup for nontechnical users</h2>
-            <p><b>Best simple choice:</b> use <a href="https://tailscale.com/download">Tailscale</a> on the host PC and on every client PC. It removes the need for port forwarding, firewall changes, or manual LAN configuration.</p>
-            <p><b>If you need access from outside the office:</b> use <a href="https://developers.cloudflare.com/cloudflare-one/connections/connect-networks/get-started/create-remote-tunnel/">Cloudflare Tunnel</a> or a similar HTTPS tunnel on the host.</p>
+            <p>
+                <b>Best simple choice:</b> use
+                <a href="https://tailscale.com/download">Tailscale</a> on the
+                host PC and on every client PC.
+                It removes the need for port forwarding, firewall changes, or
+                manual LAN configuration.
+            </p>
+            <p>
+                <b>If you need access from outside the office:</b> use
+                (
+                    '<a href="https://developers.cloudflare.com/cloudflare-one/'
+                    'connections/connect-networks/get-started/create-remote-tunnel/">'
+                    "Cloudflare Tunnel"
+                    "</a>"
+                )
+                or a similar HTTPS tunnel on the host.
+            </p>
 
             <h3>Option A - Local setup on one PC</h3>
             <ol>
-                <li>Install TradeDesk on the PC you want to use as the main machine.</li>
+                <li>
+                    Install TradeDesk on the PC you want to use as the main
+                    machine.
+                </li>
                 <li>Open the app and click <b>Use Local Backend</b>.</li>
-                <li>Leave the URL as <code>http://127.0.0.1:8742</code>.</li>
+                <li>
+                    Leave the URL as <code>http://127.0.0.1:8742</code>.
+                </li>
                 <li>Log in with the admin account.</li>
-                <li>Keep this app open; it will start and use the local backend automatically.</li>
+                <li>
+                    Keep this app open; it will start and use the local
+                    backend automatically.
+                </li>
             </ol>
 
             <h3>Option B - Shared setup using Tailscale</h3>
@@ -136,22 +132,44 @@ class SetupHelpDialog(QDialog):
                 <li>Pick one always-on PC to act as the host.</li>
                 <li>Install TradeDesk on the host PC and open it once.</li>
                 <li>On the host PC, click <b>Use Local Backend</b>.</li>
-                <li>Install Tailscale on the host PC from <a href="https://tailscale.com/download">tailscale.com/download</a>.</li>
+                <li>
+                    Install Tailscale on the host PC from
+                    <a href="https://tailscale.com/download">tailscale.com/download</a>.
+                </li>
                 <li>Sign in to Tailscale on the host PC.</li>
-                <li>Install Tailscale on every client PC and sign in with the same account or invite the users.</li>
-                <li>Find the host PC's Tailscale IP address, usually a <code>100.x.x.x</code> address.</li>
-                <li>On every other PC, open TradeDesk and choose <b>Use Shared Backend</b>.</li>
-                <li>Enter the host Tailscale URL exactly, for example <code>http://100.101.102.103:8742</code>.</li>
-                <li>Leave <b>Remember this connection</b> checked if you want each PC to keep the setting.</li>
+                <li>
+                    Install Tailscale on every client PC and sign in with the
+                    same account or invite the users.
+                </li>
+                <li>
+                    Find the host PC's Tailscale IP address, usually a
+                    <code>100.x.x.x</code> address.
+                </li>
+                <li>
+                    On every other PC, open TradeDesk and choose
+                    <b>Use Shared Backend</b>.
+                </li>
+                <li>
+                    Enter the host Tailscale URL exactly, for example
+                    <code>http://100.101.102.103:8742</code>.
+                </li>
+                <li>
+                    Leave <b>Remember this connection</b> checked if you want
+                    each PC to keep the setting.
+                </li>
                 <li>Log in normally on each client.</li>
             </ol>
 
             <h3>Option C - Shared setup with a public HTTPS URL</h3>
             <ol>
                 <li>Run the backend on a server or always-on machine.</li>
-                <li>Expose it through Cloudflare Tunnel or another public HTTPS tunnel.</li>
+                <li>Expose it through Cloudflare Tunnel or another public HTTPS
+                    tunnel.</li>
                 <li>On each client, choose <b>Use Shared Backend</b>.</li>
-                <li>Enter the public HTTPS URL exactly, such as <code>https://trade.example.com</code>.</li>
+                <li>
+                    Enter the public HTTPS URL exactly, such as
+                    <code>https://trade.example.com</code>.
+                </li>
                 <li>Log in after the connection is saved.</li>
             </ol>
 
@@ -171,16 +189,27 @@ class SetupHelpDialog(QDialog):
 
             <h3>Quick start checklist</h3>
             <ol>
-                <li>Host PC: install TradeDesk, click <b>Use Local Backend</b>, and log in once.</li>
+                <li>
+                    Host PC: install TradeDesk, click
+                    <b>Use Local Backend</b>, and log in once.
+                </li>
                 <li>Host PC: install Tailscale and sign in.</li>
                 <li>Client PCs: install Tailscale and sign in.</li>
-                <li>Client PCs: open TradeDesk, choose <b>Use Shared Backend</b>, and paste the host Tailscale URL.</li>
-                <li>Test the setup by editing data on one PC and confirming another PC refreshes.</li>
+                <li>
+                    Client PCs: open TradeDesk, choose
+                    <b>Use Shared Backend</b>, and paste the host Tailscale URL.
+                </li>
+                <li>
+                    Test the setup by editing data on one PC and confirming
+                    another PC refreshes.
+                </li>
             </ol>
 
-            <p>If you need internet access outside the office, use Cloudflare Tunnel instead of LAN or Tailscale.</p>
-            """
-        )
+            <p>
+                If you need internet access outside the office, use Cloudflare
+                Tunnel instead of LAN or Tailscale.
+            </p>
+            """)
 
         close_button = QPushButton("Close")
         close_button.clicked.connect(self.accept)
@@ -194,13 +223,18 @@ class SetupHelpDialog(QDialog):
 
 
 class MainWindow(QMainWindow):
-    def __init__(self, backend_url: str, on_close=None):
+    # Signal to request a backend restart from the GUI thread.
+    restart_requested = Signal()
+
+    def __init__(self, backend_url: str, on_close=None, restart_local_backend=None):
         super().__init__()
         self.setWindowTitle("TradeDesk ERP")
         self.resize(1400, 860)
         self._on_close = on_close
 
         self.api_client = ApiClient(backend_url)
+        # Optional callable provided by caller to restart a local backend (callable -> proc|None)
+        self._restart_local_backend = restart_local_backend
         self.live_monitor: LiveUpdateMonitor | None = None
         self.user_role: str | None = None
         self.current_module_key = "dashboard"
@@ -267,6 +301,9 @@ class MainWindow(QMainWindow):
 
         self._update_connection_indicator()
 
+        # connect restart signal to handler
+        self.restart_requested.connect(self._handle_restart_request)
+
     def _build_modules(self) -> None:
         entries = [
             ModuleEntry("dashboard", "Dashboard", DashboardModule),
@@ -290,7 +327,9 @@ class MainWindow(QMainWindow):
             button = QPushButton(entry.label)
             button.setObjectName("navButton")
             button.setCheckable(True)
-            button.clicked.connect(lambda checked=False, key=entry.key: self.switch_module(key))
+            button.clicked.connect(
+                lambda checked=False, key=entry.key: self.switch_module(key)
+            )
             self.sidebar_layout.addWidget(button)
             self.module_buttons[entry.key] = button
 
@@ -319,10 +358,25 @@ class MainWindow(QMainWindow):
         if message:
             self.statusBar().showMessage(f"Live sync reconnecting: {message}", 5000)
         self._update_connection_indicator(connected=False)
+        # If this is a local backend and a restart callback is available,
+        # request a restart via a Qt signal (handler will run in GUI thread
+        # and will offload the actual restart work to a worker thread).
+        try:
+            backend_url = self.api_client.base_url
+            if backend_url.startswith("http://127.0.0.1") or backend_url.startswith(
+                "http://localhost"
+            ):
+                if callable(self._restart_local_backend):
+                    # emit signal to request restart; connected handler will do the work
+                    self.restart_requested.emit()
+        except Exception:
+            pass
 
     def _update_connection_indicator(self, connected: bool = True) -> None:
         backend_url = self.api_client.base_url
-        if backend_url.startswith("http://127.0.0.1") or backend_url.startswith("http://localhost"):
+        if backend_url.startswith("http://127.0.0.1") or backend_url.startswith(
+            "http://localhost"
+        ):
             mode = "Local"
         else:
             mode = "Shared"
@@ -341,7 +395,10 @@ class MainWindow(QMainWindow):
 
         if "user" in table_name:
             modules.add("users")
-        if any(token in table_name for token in ("account", "transaction", "voucher", "bank", "cash")):
+        if any(
+            token in table_name
+            for token in ("account", "transaction", "voucher", "bank", "cash")
+        ):
             modules.update({"accounts", "banks", "cash", "vouchers"})
         if "customer" in table_name:
             modules.add("customers")
@@ -432,13 +489,66 @@ class MainWindow(QMainWindow):
             pass
 
         try:
-            self.live_monitor = LiveUpdateMonitor(self.api_client)
-            self.live_monitor.connected.connect(lambda: self.statusBar().showMessage("Live sync connected", 3000))
+            if self._use_async_live_monitor():
+                self.live_monitor = AsyncLiveUpdateMonitor(self.api_client)
+            else:
+                self.live_monitor = LiveUpdateMonitor(self.api_client)
+            self.live_monitor.connected.connect(
+                lambda: self.statusBar().showMessage("Live sync connected", 3000)
+            )
             self.live_monitor.disconnected.connect(self._on_live_disconnected)
             self.live_monitor.event_received.connect(self._on_live_event)
             self.live_monitor.start()
         except Exception:
             self.live_monitor = None
+
+    def _use_async_live_monitor(self) -> bool:
+        return str(os.environ.get("TRADEDESK_USE_QTASYNCIO", "")).strip().lower() in {
+            "1",
+            "true",
+            "yes",
+            "on",
+        }
+
+    def _handle_restart_request(self) -> None:
+        """Handle a restart request on the GUI thread: start a worker to perform the restart so
+        the backend spawn runs off the main thread, but GUI updates remain in the main thread.
+        """
+        if not callable(self._restart_local_backend):
+            return
+
+        from PySide6.QtCore import QThreadPool
+
+        from .workers import Worker
+
+        self.statusBar().showMessage("Restarting local backend...", 5000)
+
+        def _call_restart():
+            try:
+                return self._restart_local_backend()
+            except Exception:
+                raise
+
+        worker = Worker(_call_restart)
+
+        def _on_result(proc):
+            if proc is not None:
+                self.statusBar().showMessage("Local backend restarted", 3000)
+                self._update_connection_indicator(connected=True)
+            else:
+                self.statusBar().showMessage("Failed to restart local backend", 5000)
+
+        def _on_error(exc):
+            try:
+                self.statusBar().showMessage(
+                    f"Failed to restart local backend: {exc}", 8000
+                )
+            except Exception:
+                pass
+
+        worker.signals.result.connect(_on_result)
+        worker.signals.error.connect(_on_error)
+        QThreadPool.globalInstance().start(worker)
 
     def _stop_live_monitor(self) -> None:
         if self.live_monitor is None:
@@ -454,7 +564,10 @@ class MainWindow(QMainWindow):
         while True:
             dialog = LoginDialog(self)
             if initial_credentials:
-                dialog.prefill(username=initial_credentials.get("username"), password=initial_credentials.get("password"))
+                dialog.prefill(
+                    username=initial_credentials.get("username"),
+                    password=initial_credentials.get("password"),
+                )
                 initial_credentials = None
 
             res = dialog.exec()
@@ -468,19 +581,41 @@ class MainWindow(QMainWindow):
                 dialog.show_error("Username and password are required")
                 continue
 
-            try:
-                resp = httpx.post(f"{self.api_client.base_url}/api/auth/login", json={"username": username, "password": password}, timeout=10.0)
-            except Exception as exc:
-                dialog.show_error(friendly_exception_message(exc, "Login"))
+            # Run login in a worker and wait via a nested event loop so the modal dialog
+            # remains responsive but we avoid blocking the main thread.
+            login_result = {}
+
+            def _do_login():
+                resp = self.api_client.sync_post(
+                    "/api/auth/login", json={"username": username, "password": password}
+                )
+                resp.raise_for_status()
+                return resp.json()
+
+            loop = QEventLoop()
+
+            def _on_login(result):
+                login_result["body"] = result
+                loop.quit()
+
+            def _on_login_error(exc):
+                login_result["error"] = exc
+                loop.quit()
+
+            worker = Worker(_do_login)
+            worker.signals.result.connect(_on_login)
+            worker.signals.error.connect(_on_login_error)
+            QThreadPool.globalInstance().start(worker)
+            loop.exec()
+
+            if "error" in login_result:
+                dialog.show_error(
+                    friendly_exception_message(login_result["error"], "Login")
+                )
                 continue
 
-            if resp.status_code != 200:
-                dialog.show_error(friendly_http_error(resp, "Login"))
-                continue
-
-            try:
-                body = resp.json()
-            except Exception:
+            body = login_result.get("body")
+            if not body or not isinstance(body, dict):
                 dialog.show_error("Invalid response from server")
                 continue
 
@@ -493,23 +628,40 @@ class MainWindow(QMainWindow):
             try:
                 self.api_client.set_tokens(access, refresh)
             except Exception:
-                # tokens stored best-effort; continue
                 pass
 
-            # fetch current user
-            try:
-                me = httpx.get(f"{self.api_client.base_url}/api/auth/me", headers=self.api_client.auth_headers(), timeout=5.0)
-            except Exception as exc:
-                dialog.show_error(friendly_exception_message(exc, "Fetch user"))
+            # fetch current user via worker as well
+            me_result = {}
+
+            def _do_me():
+                resp = self.api_client.sync_get("/api/auth/me")
+                resp.raise_for_status()
+                return resp.json()
+
+            loop2 = QEventLoop()
+
+            def _on_me(result):
+                me_result["user"] = result
+                loop2.quit()
+
+            def _on_me_error(exc):
+                me_result["error"] = exc
+                loop2.quit()
+
+            worker2 = Worker(_do_me)
+            worker2.signals.result.connect(_on_me)
+            worker2.signals.error.connect(_on_me_error)
+            QThreadPool.globalInstance().start(worker2)
+            loop2.exec()
+
+            if "error" in me_result:
+                dialog.show_error(
+                    friendly_exception_message(me_result["error"], "Fetch user")
+                )
                 continue
 
-            if me.status_code != 200:
-                dialog.show_error(friendly_http_error(me, "Fetch user"))
-                continue
-
-            try:
-                user = me.json()
-            except Exception:
+            user = me_result.get("user")
+            if not user or not isinstance(user, dict):
                 dialog.show_error("Failed to parse user info")
                 continue
 

@@ -1,0 +1,21 @@
+name: CI (legacy)
+
+on:
+  workflow_dispatch: {}
+
+jobs:
+  legacy-test:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Set up Python
+        uses: actions/setup-python@v4
+        with:
+          python-version: '3.13'
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r requirements.txt -r packaging/requirements-dev.txt
+      - name: Run BackendManager tests only
+        run: |
+          pytest -q tests/test_backend_manager.py

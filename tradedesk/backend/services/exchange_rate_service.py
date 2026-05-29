@@ -1,15 +1,16 @@
 from __future__ import annotations
 
+import asyncio
+import json
 from datetime import datetime
+from pathlib import Path
+
+import httpx
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from ..models.exchange_rate import ExchangeRate
-import httpx
 from ..config import settings
-import asyncio
-import json
-from pathlib import Path
+from ..models.exchange_rate import ExchangeRate
 
 
 class ExchangeRateService:
@@ -21,20 +22,38 @@ class ExchangeRateService:
         res = await self.db.execute(stmt)
         return list(res.scalars().all())
 
-    async def create_rate(self, currency_from: str, currency_to: str, rate: float, effective_date: datetime) -> ExchangeRate:
-        er = ExchangeRate(currency_from=currency_from.upper(), currency_to=currency_to.upper(), rate=rate, effective_date=effective_date)
+    async def create_rate(
+        self,
+        currency_from: str,
+        currency_to: str,
+        rate: float,
+        effective_date: datetime,
+    ) -> ExchangeRate:
+        er = ExchangeRate(
+            currency_from=currency_from.upper(),
+            currency_to=currency_to.upper(),
+            rate=rate,
+            effective_date=effective_date,
+        )
         self.db.add(er)
         await self.db.commit()
         await self.db.refresh(er)
         return er
 
-    async def sync_from_public(self, base: str | None = None, targets: list[str] | None = None, source_url: str | None = None) -> list[ExchangeRate]:
+    async def sync_from_public(
+        self,
+        base: str | None = None,
+        targets: list[str] | None = None,
+        source_url: str | None = None,
+    ) -> list[ExchangeRate]:
         """Fetch rates from public source and persist them.
 
         Returns list of created ExchangeRate objects.
         """
         base = (base or settings.exchange_rate_default_base).upper()
-        targets = [t.upper() for t in (targets or settings.exchange_rate_default_targets)]
+        targets = [
+            t.upper() for t in (targets or settings.exchange_rate_default_targets)
+        ]
         source_url = source_url or settings.exchange_rate_source_url
         url = source_url.format(base=base)
         # Resiliency: retry with exponential backoff
@@ -52,7 +71,7 @@ class ExchangeRateService:
                     break
                 except Exception as exc:  # pragma: no cover - external API failures
                     last_exc = exc
-                    await asyncio.sleep(backoff ** attempt)
+                    await asyncio.sleep(backoff**attempt)
 
         status_path = Path(settings.data_dir) / "exchange_sync_status.json"
         status = {"last_success": None, "consecutive_failures": 0}
@@ -73,9 +92,20 @@ class ExchangeRateService:
                 try:
                     to = settings.diagnostics_notify_email_to
                     if to:
-                        from .email_service import send_simple_email as _send_email
+                        from .email_service import \
+                            send_simple_email as _send_email
 
-                        await asyncio.to_thread(_send_email, to, "Exchange rate sync failure", f"Exchange rate sync has failed {status['consecutive_failures']} times. Last error: {last_exc}")
+                        await asyncio.to_thread(
+                            _send_email,
+                            to,
+                            "Exchange rate sync failure",
+                            (
+                                "Exchange rate sync has failed "
+                                + str(status["consecutive_failures"])
+                                + ". Last error: "
+                                + str(last_exc)
+                            ),
+                        )
                 except Exception:
                     pass
                 try:
@@ -85,11 +115,15 @@ class ExchangeRateService:
                     if sms_to:
                         from .sms_service import send_sms as _send_sms
 
-                        await asyncio.to_thread(_send_sms, sms_to, f"Exchange sync failures: {status['consecutive_failures']}")
+                        await asyncio.to_thread(
+                            _send_sms,
+                            sms_to,
+                            f"Exchange sync failures: {status['consecutive_failures']}",
+                        )
                 except Exception:
                     pass
             raise last_exc
-        rates = data.get('rates') or {}
+        rates = data.get("rates") or {}
         created: list[ExchangeRate] = []
         eff = datetime.utcnow()
         async with self.db.begin():
@@ -99,7 +133,12 @@ class ExchangeRateService:
                 rate = rates.get(tgt)
                 if rate is None:
                     continue
-                er = ExchangeRate(currency_from=base, currency_to=tgt, rate=float(rate), effective_date=eff)
+                er = ExchangeRate(
+                    currency_from=base,
+                    currency_to=tgt,
+                    rate=float(rate),
+                    effective_date=eff,
+                )
                 self.db.add(er)
                 created.append(er)
         await self.db.commit()
@@ -112,7 +151,16 @@ class ExchangeRateService:
             pass
         return created
 
-    async def get_latest(self, currency_from: str, currency_to: str) -> ExchangeRate | None:
-        stmt = select(ExchangeRate).where(ExchangeRate.currency_from == currency_from.upper(), ExchangeRate.currency_to == currency_to.upper()).order_by(ExchangeRate.effective_date.desc())
+    async def get_latest(
+        self, currency_from: str, currency_to: str
+    ) -> ExchangeRate | None:
+        stmt = (
+            select(ExchangeRate)
+            .where(
+                ExchangeRate.currency_from == currency_from.upper(),
+                ExchangeRate.currency_to == currency_to.upper(),
+            )
+            .order_by(ExchangeRate.effective_date.desc())
+        )
         res = await self.db.execute(stmt)
         return res.scalars().first()

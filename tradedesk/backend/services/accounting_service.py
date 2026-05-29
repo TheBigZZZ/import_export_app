@@ -1,8 +1,7 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
-from decimal import Decimal, ROUND_HALF_UP
-
+from decimal import ROUND_HALF_UP, Decimal
 
 MONEY = Decimal("0.01")
 
@@ -18,10 +17,16 @@ class AccountingValidationError(ValueError):
 
 
 def validate_double_entry(lines: list[JournalLine]) -> None:
-    total_debit = sum((line.debit for line in lines), Decimal("0.00")).quantize(MONEY, rounding=ROUND_HALF_UP)
-    total_credit = sum((line.credit for line in lines), Decimal("0.00")).quantize(MONEY, rounding=ROUND_HALF_UP)
+    total_debit = sum((line.debit for line in lines), Decimal("0.00")).quantize(
+        MONEY, rounding=ROUND_HALF_UP
+    )
+    total_credit = sum((line.credit for line in lines), Decimal("0.00")).quantize(
+        MONEY, rounding=ROUND_HALF_UP
+    )
     if total_debit != total_credit:
-        raise AccountingValidationError(f"Unbalanced voucher: debit={total_debit} credit={total_credit}")
+        raise AccountingValidationError(
+            f"Unbalanced voucher: debit={total_debit} credit={total_credit}"
+        )
 
 
 def allocate_import_cost(
@@ -37,7 +42,9 @@ def allocate_import_cost(
         basis = fob_values
     elif method == "quantity":
         if not quantities or len(quantities) != len(fob_values):
-            raise AccountingValidationError("Quantity basis requires matching quantities")
+            raise AccountingValidationError(
+                "Quantity basis requires matching quantities"
+            )
         basis = quantities
     else:
         raise AccountingValidationError("Unknown allocation method")
@@ -50,7 +57,9 @@ def allocate_import_cost(
     running_total = Decimal("0.00")
     for index, value in enumerate(basis):
         if index == len(basis) - 1:
-            amount = (extra_cost_total - running_total).quantize(MONEY, rounding=ROUND_HALF_UP)
+            amount = (extra_cost_total - running_total).quantize(
+                MONEY, rounding=ROUND_HALF_UP
+            )
         else:
             ratio = value / denominator
             amount = (extra_cost_total * ratio).quantize(MONEY, rounding=ROUND_HALF_UP)

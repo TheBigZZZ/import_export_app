@@ -30,11 +30,14 @@ class UserService:
     async def create_user(self, payload: UserCreate) -> User:
         # Enforce max users from configuration
         from ..config import settings
+
         stmt = select(User)
         result = await self.db.execute(stmt)
         current_count = len(result.scalars().all())
         if settings.max_users and current_count >= settings.max_users:
-            raise RuntimeError(f"Maximum number of users ({settings.max_users}) reached")
+            raise RuntimeError(
+                f"Maximum number of users ({settings.max_users}) reached"
+            )
 
         user = User(
             full_name=payload.full_name,
@@ -67,7 +70,9 @@ class UserService:
         await self.db.refresh(user)
         return user
 
-    async def register_failed_login(self, user: User, limit: int, lock_minutes: int) -> None:
+    async def register_failed_login(
+        self, user: User, limit: int, lock_minutes: int
+    ) -> None:
         user.failed_login_attempts += 1
         if user.failed_login_attempts >= limit:
             user.locked_until = datetime.now(UTC).replace(microsecond=0)
@@ -82,6 +87,7 @@ class UserService:
 
     async def bulk_delete_users(self, ids: list[int]) -> list[int]:
         from sqlalchemy import delete
+
         failed: list[int] = []
         try:
             stmt = delete(User).where(User.id.in_(ids))

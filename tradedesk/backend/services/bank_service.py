@@ -18,7 +18,9 @@ class BankService:
         self.db = db
 
     async def list_banks(self) -> list[BankAccount]:
-        result = await self.db.execute(select(BankAccount).order_by(BankAccount.bank_name.asc()))
+        result = await self.db.execute(
+            select(BankAccount).order_by(BankAccount.bank_name.asc())
+        )
         return list(result.scalars().all())
 
     async def create_bank(self, payload: BankCreate) -> BankAccount:
@@ -49,19 +51,29 @@ class BankService:
         created_by: int | None,
     ):
         if from_bank_account_id == to_bank_account_id:
-            raise HTTPException(status_code=status.HTTP_422_UNPROCESSABLE_ENTITY, detail="Source and target bank must differ")
+            raise HTTPException(
+                status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+                detail="Source and target bank must differ",
+            )
 
         banks = await self.db.execute(
-            select(BankAccount).where(BankAccount.id.in_([from_bank_account_id, to_bank_account_id]))
+            select(BankAccount).where(
+                BankAccount.id.in_([from_bank_account_id, to_bank_account_id])
+            )
         )
         bank_map = {bank.id: bank for bank in banks.scalars().all()}
         if from_bank_account_id not in bank_map or to_bank_account_id not in bank_map:
-            raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Bank account not found")
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND, detail="Bank account not found"
+            )
 
         source = bank_map[from_bank_account_id]
         target = bank_map[to_bank_account_id]
         if source.current_balance < amount:
-            raise HTTPException(status_code=status.HTTP_422_UNPROCESSABLE_ENTITY, detail="Insufficient source bank balance")
+            raise HTTPException(
+                status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+                detail="Insufficient source bank balance",
+            )
 
         source.current_balance -= amount
         target.current_balance += amount
@@ -93,9 +105,13 @@ class BankService:
         return voucher
 
     async def statement(self, bank_account_id: int) -> BankStatementResponse:
-        exists = await self.db.execute(select(BankAccount.id).where(BankAccount.id == bank_account_id))
+        exists = await self.db.execute(
+            select(BankAccount.id).where(BankAccount.id == bank_account_id)
+        )
         if exists.scalar_one_or_none() is None:
-            raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Bank account not found")
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND, detail="Bank account not found"
+            )
 
         rows = await self.db.execute(
             select(Transaction)

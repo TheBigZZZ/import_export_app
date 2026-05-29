@@ -1,7 +1,3 @@
-from pathlib import Path
-import tempfile
-import shutil
-
 from tradedesk.backend import config
 from tradedesk.backend.backup import backup_db, restore_db
 

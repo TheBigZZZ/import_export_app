@@ -7,7 +7,8 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from ..models.account import AccountType, ChartOfAccount
 from ..models.transaction import Transaction
-from ..schemas.accounting import AccountCreate, AccountTreeNode, AccountUpdate, LedgerEntry, LedgerResponse
+from ..schemas.accounting import (AccountCreate, AccountTreeNode,
+                                  AccountUpdate, LedgerEntry, LedgerResponse)
 
 
 class AccountService:
@@ -15,11 +16,15 @@ class AccountService:
         self.db = db
 
     async def list_accounts(self) -> list[ChartOfAccount]:
-        result = await self.db.execute(select(ChartOfAccount).order_by(ChartOfAccount.account_code.asc()))
+        result = await self.db.execute(
+            select(ChartOfAccount).order_by(ChartOfAccount.account_code.asc())
+        )
         return list(result.scalars().all())
 
     async def get_account(self, account_id: int) -> ChartOfAccount | None:
-        result = await self.db.execute(select(ChartOfAccount).where(ChartOfAccount.id == account_id))
+        result = await self.db.execute(
+            select(ChartOfAccount).where(ChartOfAccount.id == account_id)
+        )
         return result.scalar_one_or_none()
 
     async def create_account(self, payload: AccountCreate) -> ChartOfAccount:
@@ -35,7 +40,9 @@ class AccountService:
         await self.db.refresh(account)
         return account
 
-    async def update_account(self, account: ChartOfAccount, payload: AccountUpdate) -> ChartOfAccount:
+    async def update_account(
+        self, account: ChartOfAccount, payload: AccountUpdate
+    ) -> ChartOfAccount:
         data = payload.model_dump(exclude_unset=True)
         if "account_type" in data and data["account_type"] is not None:
             data["account_type"] = AccountType(data["account_type"])
@@ -77,9 +84,10 @@ class AccountService:
         rows = list(tx_result.scalars().all())
 
         total_result = await self.db.execute(
-            select(func.coalesce(func.sum(Transaction.debit), 0), func.coalesce(func.sum(Transaction.credit), 0)).where(
-                Transaction.account_id == account_id
-            )
+            select(
+                func.coalesce(func.sum(Transaction.debit), 0),
+                func.coalesce(func.sum(Transaction.credit), 0),
+            ).where(Transaction.account_id == account_id)
         )
         debit, credit = total_result.one()
         total_debit = Decimal(debit)

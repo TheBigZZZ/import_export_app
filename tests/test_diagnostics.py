@@ -1,13 +1,11 @@
-import asyncio
-import json
 from pathlib import Path
 
 import httpx
 import pytest
 import pytest_asyncio
 
-from tradedesk.backend.main import app
 from tradedesk.backend import config
+from tradedesk.backend.main import app
 
 
 @pytest_asyncio.fixture
@@ -28,7 +26,9 @@ async def client(tmp_path: Path):
 
     # restore
     config.settings.diagnostics_enabled = original["diagnostics_enabled"]
-    config.settings.diagnostics_allow_self_register = original["diagnostics_allow_self_register"]
+    config.settings.diagnostics_allow_self_register = original[
+        "diagnostics_allow_self_register"
+    ]
     config.settings.diagnostics_storage_dir = original["diagnostics_storage_dir"]
 
 
@@ -43,10 +43,10 @@ async def test_register_and_upload(client: httpx.AsyncClient, tmp_path: Path):
     assert install_id and secret
 
     # Upload with signature
-    sample = b"traceback: example" 
+    sample = b"traceback: example"
     import hmac
-    from datetime import datetime, timezone
     import uuid
+    from datetime import datetime, timezone
 
     timestamp = datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
     nonce = uuid.uuid4().hex
@@ -54,7 +54,12 @@ async def test_register_and_upload(client: httpx.AsyncClient, tmp_path: Path):
     sig = hmac.new(secret.encode("utf-8"), payload, "sha256").hexdigest()
 
     files = {"file": ("err.txt", sample, "text/plain")}
-    headers = {"X-Install-Id": install_id, "X-Signature": sig, "X-Signature-Timestamp": timestamp, "X-Signature-Nonce": nonce}
+    headers = {
+        "X-Install-Id": install_id,
+        "X-Signature": sig,
+        "X-Signature-Timestamp": timestamp,
+        "X-Signature-Nonce": nonce,
+    }
     up = await client.post("/diagnostics/upload", files=files, headers=headers)
     assert up.status_code == 200
-    assert (tmp_path / next(tmp_path.iterdir()).name)  # some file exists
+    assert tmp_path / next(tmp_path.iterdir()).name  # some file exists

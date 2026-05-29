@@ -7,19 +7,20 @@
 pip install pyinstaller
 ```
 
-1. Build single-file executable:
+1. Build the Windows bundle and run the canonical smoke test:
 
 ```powershell
-./packaging/build_exe.ps1
+./scripts/build_windows.ps1
+./scripts/smoke_test.ps1 -ExePath .\dist\TradeDeskERP\TradeDeskERP.exe -Timeout 180
 ```
 
-1. The produced exe will be in `dist\TradeDesk.exe` (on Windows). Run it to launch the bundled backend and frontend.
+1. The produced exe will be in `dist\TradeDeskERP\TradeDeskERP.exe` (on Windows). Run it to launch the bundled backend and frontend.
 
 Notes:
 
-- The build script uses `launcher.py` as the entrypoint which forwards to `frontend.main`.
-- No code-signing is performed. If you later want to sign the binary, provide a code-signing utility and certificate.
-- This packaging approach bundles Python and required modules; test the exe on a clean Windows VM before distribution.
+- The build script uses `packaging/tradedesk.spec` as the entrypoint and bundles the backend and frontend together.
+- Code signing is not part of the current release scope.
+- This packaging approach bundles Python and required modules; validate the exe with the smoke script before distribution.
 
 ## Phase 6 Packaging Guide
 

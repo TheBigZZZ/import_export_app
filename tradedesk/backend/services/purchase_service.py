@@ -12,7 +12,8 @@ from ..models.purchase import PurchaseOrder, PurchaseOrderItem, PurchaseStatus
 from ..models.supplier import Supplier
 from ..models.transaction import PartyType
 from ..schemas.inventory import StockMovementCreate
-from ..schemas.purchase_ops import PurchaseOrderCreate, PurchaseOrderItemRead, PurchaseOrderRead, PurchasePostResponse
+from ..schemas.purchase_ops import (PurchaseOrderCreate, PurchaseOrderItemRead,
+                                    PurchaseOrderRead, PurchasePostResponse)
 from ..schemas.voucher import VoucherCreate, VoucherLineIn
 from .product_service import ProductService
 from .voucher_service import VoucherService
@@ -21,7 +22,9 @@ MONEY = Decimal("0.01")
 
 
 def calculate_purchase_subtotal(items: list[PurchaseOrderItem]) -> Decimal:
-    return sum((Decimal(item.line_total) for item in items), Decimal("0.00")).quantize(MONEY)
+    return sum((Decimal(item.line_total) for item in items), Decimal("0.00")).quantize(
+        MONEY
+    )
 
 
 class PurchaseService:
@@ -29,20 +32,31 @@ class PurchaseService:
         self.db = db
 
     async def _account_id(self, code: str) -> int:
-        row = await self.db.execute(select(ChartOfAccount).where(ChartOfAccount.account_code == code))
+        row = await self.db.execute(
+            select(ChartOfAccount).where(ChartOfAccount.account_code == code)
+        )
         account = row.scalar_one_or_none()
         if not account:
-            raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=f"Account {code} is not configured")
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail=f"Account {code} is not configured",
+            )
         return account.id
 
     async def list_orders(self) -> list[PurchaseOrderRead]:
-        rows = await self.db.execute(select(PurchaseOrder).order_by(PurchaseOrder.order_date.desc(), PurchaseOrder.id.desc()))
+        rows = await self.db.execute(
+            select(PurchaseOrder).order_by(
+                PurchaseOrder.order_date.desc(), PurchaseOrder.id.desc()
+            )
+        )
         orders = list(rows.scalars().all())
         return [await self._to_read(order) for order in orders]
 
     async def _to_read(self, order: PurchaseOrder) -> PurchaseOrderRead:
         item_rows = await self.db.execute(
-            select(PurchaseOrderItem).where(PurchaseOrderItem.purchase_order_id == order.id).order_by(PurchaseOrderItem.id.asc())
+            select(PurchaseOrderItem)
+            .where(PurchaseOrderItem.purchase_order_id == order.id)
+            .order_by(PurchaseOrderItem.id.asc())
         )
         items = [
             PurchaseOrderItemRead(
@@ -72,17 +86,28 @@ class PurchaseService:
             items=items,
         )
 
-    async def create_order(self, payload: PurchaseOrderCreate, created_by: int | None) -> PurchaseOrderRead:
-        supplier_row = await self.db.execute(select(Supplier).where(Supplier.id == payload.supplier_id))
+    async def create_order(
+        self, payload: PurchaseOrderCreate, created_by: int | None
+    ) -> PurchaseOrderRead:
+        supplier_row = await self.db.execute(
+            select(Supplier).where(Supplier.id == payload.supplier_id)
+        )
         if not supplier_row.scalar_one_or_none():
-            raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Supplier not found")
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND, detail="Supplier not found"
+            )
 
         product_ids = [item.product_id for item in payload.items]
-        products = await self.db.execute(select(Product.id).where(Product.id.in_(product_ids)))
+        products = await self.db.execute(
+            select(Product.id).where(Product.id.in_(product_ids))
+        )
         existing = {row[0] for row in products.all()}
         missing = [pid for pid in product_ids if pid not in existing]
         if missing:
-            raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=f"Missing product(s): {missing}")
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail=f"Missing product(s): {missing}",
+            )
 
         order = PurchaseOrder(
             po_no=payload.po_no,
@@ -103,7 +128,10 @@ class PurchaseService:
 
         subtotal = Decimal("0.00")
         for item in payload.items:
-            line_total = (Decimal(item.quantity) * Decimal(item.unit_price) - Decimal(item.discount)).quantize(MONEY)
+            line_total = (
+                Decimal(item.quantity) * Decimal(item.unit_price)
+                - Decimal(item.discount)
+            ).quantize(MONEY)
             subtotal += line_total
             self.db.add(
                 PurchaseOrderItem(
@@ -124,18 +152,34 @@ class PurchaseService:
         await self.db.refresh(order)
         return await self._to_read(order)
 
-    async def post_order(self, order_id: int, user_id: int | None) -> PurchasePostResponse:
-        row = await self.db.execute(select(PurchaseOrder).where(PurchaseOrder.id == order_id))
+    async def post_order(
+        self, order_id: int, user_id: int | None
+    ) -> PurchasePostResponse:
+        row = await self.db.execute(
+            select(PurchaseOrder).where(PurchaseOrder.id == order_id)
+        )
         order = row.scalar_one_or_none()
         if not order:
-            raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Purchase order not found")
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND, detail="Purchase order not found"
+            )
         if order.status not in (PurchaseStatus.ordered, PurchaseStatus.draft):
-            raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Only draft/ordered purchase can be posted")
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="Only draft/ordered purchase can be posted",
+            )
 
-        item_rows = await self.db.execute(select(PurchaseOrderItem).where(PurchaseOrderItem.purchase_order_id == order.id))
+        item_rows = await self.db.execute(
+            select(PurchaseOrderItem).where(
+                PurchaseOrderItem.purchase_order_id == order.id
+            )
+        )
         items = list(item_rows.scalars().all())
         if not items:
-            raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Purchase order has no items")
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="Purchase order has no items",
+            )
 
         product_service = ProductService(self.db)
         for item in items:

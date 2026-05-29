@@ -2,6 +2,7 @@ from .account import ChartOfAccount
 from .audit_log import AuditLog
 from .bank import BankAccount
 from .customer import Customer
+from .exchange_rate import ExchangeRate
 from .expense import Expense
 from .import_shipment import ImportShipment, ImportShipmentItem
 from .product import Product
@@ -11,7 +12,6 @@ from .stock_ledger import StockLedger
 from .supplier import Supplier
 from .transaction import Transaction
 from .user import User
-from .exchange_rate import ExchangeRate
 
 __all__ = [
     "User",

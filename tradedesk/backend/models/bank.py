@@ -16,6 +16,10 @@ class BankAccount(Base):
     branch_name: Mapped[str | None] = mapped_column(String(100), nullable=True)
     swift_code: Mapped[str | None] = mapped_column(String(50), nullable=True)
     currency: Mapped[str] = mapped_column(String(10), nullable=False, default="BDT")
-    opening_balance: Mapped[Decimal] = mapped_column(Numeric(18, 2), nullable=False, default=Decimal("0.00"))
-    current_balance: Mapped[Decimal] = mapped_column(Numeric(18, 2), nullable=False, default=Decimal("0.00"))
+    opening_balance: Mapped[Decimal] = mapped_column(
+        Numeric(18, 2), nullable=False, default=Decimal("0.00")
+    )
+    current_balance: Mapped[Decimal] = mapped_column(
+        Numeric(18, 2), nullable=False, default=Decimal("0.00")
+    )
     is_active: Mapped[bool] = mapped_column(Boolean, nullable=False, default=True)

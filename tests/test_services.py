@@ -3,17 +3,12 @@ from decimal import Decimal
 import pytest
 
 from tradedesk.backend.services.accounting_service import (
-    AccountingValidationError,
-    JournalLine,
-    allocate_import_cost,
-    validate_double_entry,
-)
+    AccountingValidationError, JournalLine, allocate_import_cost,
+    validate_double_entry)
 from tradedesk.backend.services.inventory_service import (
-    StockValidationError,
-    apply_stock_movement,
-    validate_document_is_posted,
-)
-from tradedesk.backend.startup_checks import StartupConfigSnapshot, evaluate_static_startup_checks
+    StockValidationError, apply_stock_movement, validate_document_is_posted)
+from tradedesk.backend.startup_checks import (StartupConfigSnapshot,
+                                              evaluate_static_startup_checks)
 
 
 def test_double_entry_balanced_passes() -> None:
@@ -46,7 +41,9 @@ def test_import_cost_allocation_by_quantity() -> None:
     values = [Decimal("100"), Decimal("300")]
     quantities = [Decimal("2"), Decimal("8")]
     extra = Decimal("100")
-    allocations = allocate_import_cost(values, extra, method="quantity", quantities=quantities)
+    allocations = allocate_import_cost(
+        values, extra, method="quantity", quantities=quantities
+    )
     assert allocations == [Decimal("20.00"), Decimal("80.00")]
 
 

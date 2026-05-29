@@ -2,21 +2,21 @@ from __future__ import annotations
 
 from collections.abc import Iterable
 
-from PySide6.QtCore import Qt, QAbstractTableModel, QSortFilterProxyModel, QModelIndex
-from PySide6.QtWidgets import (
-    QAbstractItemView,
-    QHBoxLayout,
-    QLineEdit,
-    QPushButton,
-    QHeaderView,
-    QTableView,
-    QVBoxLayout,
-    QWidget,
+from PySide6.QtCore import (
+    QAbstractTableModel,
+    QModelIndex,
+    QSortFilterProxyModel,
+    Qt,
 )
+from PySide6.QtWidgets import (QAbstractItemView, QHBoxLayout, QHeaderView,
+                               QLineEdit, QPushButton, QTableView, QVBoxLayout,
+                               QWidget)
 
 
 class _ListTableModel(QAbstractTableModel):
-    def __init__(self, headers: list[str] | None = None, rows: list[list[str]] | None = None):
+    def __init__(
+        self, headers: list[str] | None = None, rows: list[list[str]] | None = None
+    ):
         super().__init__()
         self._headers = headers or []
         self._rows = rows or []
@@ -35,16 +35,18 @@ class _ListTableModel(QAbstractTableModel):
                 return self._rows[index.row()][index.column()]
             except Exception:
                 return ""
-        return QVariant()
+        return None
 
-    def headerData(self, section: int, orientation: Qt.Orientation, role: int = Qt.DisplayRole):
+    def headerData(
+        self, section: int, orientation: Qt.Orientation, role: int = Qt.DisplayRole
+    ):
         if role != Qt.DisplayRole:
             return None
         if orientation == Qt.Horizontal:
             if 0 <= section < len(self._headers):
                 return self._headers[section]
             return f"Column {section}"
-        return QVariant()
+        return None
 
     def flags(self, index: QModelIndex):
         return Qt.ItemIsSelectable | Qt.ItemIsEnabled
@@ -83,7 +85,9 @@ class DataTable(QWidget):
     - `selected_row_indices()` helper returns source-model row indices of selection
     """
 
-    def __init__(self, parent=None, delete_callback=None, delete_label: str = "Delete Selected"):
+    def __init__(
+        self, parent=None, delete_callback=None, delete_label: str = "Delete Selected"
+    ):
         super().__init__(parent)
 
         self.search_box = QLineEdit()
@@ -112,7 +116,9 @@ class DataTable(QWidget):
         self.table.setTextElideMode(Qt.TextElideMode.ElideRight)
         self.table.setHorizontalScrollMode(QAbstractItemView.ScrollMode.ScrollPerPixel)
         self.table.setVerticalScrollMode(QAbstractItemView.ScrollMode.ScrollPerPixel)
-        self.table.horizontalHeader().setDefaultAlignment(Qt.AlignmentFlag.AlignLeft | Qt.AlignmentFlag.AlignVCenter)
+        self.table.horizontalHeader().setDefaultAlignment(
+            Qt.AlignmentFlag.AlignLeft | Qt.AlignmentFlag.AlignVCenter
+        )
         self.table.horizontalHeader().setMinimumSectionSize(72)
 
         # Default uniform row height (pixels). Keep reasonable for compact lists.
@@ -146,7 +152,9 @@ class DataTable(QWidget):
     ) -> None:
         self._raw_rows = rows
         self._headers = headers
-        self._stretch_columns = set(stretch_columns or self._infer_stretch_columns(headers))
+        self._stretch_columns = set(
+            stretch_columns or self._infer_stretch_columns(headers)
+        )
         self._model.set_rows(headers, rows)
         # Ensure row heights are uniform
         for r in range(len(rows)):
@@ -166,7 +174,16 @@ class DataTable(QWidget):
         return sorted(set(res))
 
     def _infer_stretch_columns(self, headers: list[str]) -> set[int]:
-        keywords = ("description", "path", "full name", "account", "email", "name", "address", "remarks")
+        keywords = (
+            "description",
+            "path",
+            "full name",
+            "account",
+            "email",
+            "name",
+            "address",
+            "remarks",
+        )
         lowered = [header.lower() for header in headers]
         for keyword in keywords:
             for index, header in enumerate(lowered):
@@ -190,7 +207,9 @@ class DataTable(QWidget):
             try:
                 self.table.resizeColumnToContents(column)
                 current_width = self.table.columnWidth(column)
-                self.table.setColumnWidth(column, min(max(current_width, 72), self._max_content_width))
+                self.table.setColumnWidth(
+                    column, min(max(current_width, 72), self._max_content_width)
+                )
             except Exception:
                 pass
 
@@ -209,7 +228,7 @@ class DataTable(QWidget):
         # show non-blocking status via parent window if available
         try:
             w = self.window()
-            if w and hasattr(w, 'statusBar'):
-                w.statusBar().showMessage('Table cleared', 3000)
+            if w and hasattr(w, "statusBar"):
+                w.statusBar().showMessage("Table cleared", 3000)
         except Exception:
             pass

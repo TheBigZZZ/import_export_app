@@ -1,4 +1,5 @@
 from pathlib import Path
+
 from pydantic import Field
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
@@ -21,18 +22,22 @@ class Settings(BaseSettings):
 
     # Server-provided role definitions (key + label). Frontend should fetch /api/roles
     # to populate role dropdowns. Represented as list of dicts with 'key' and 'label'.
-    roles: list[dict] = Field(default_factory=lambda: [
-        {"key": "viewer", "label": "Viewer"},
-        {"key": "sales_manager", "label": "Sales Manager"},
-        {"key": "purchase_manager", "label": "Purchase Manager"},
-        {"key": "accounts_manager", "label": "Accounts Manager"},
-        {"key": "admin", "label": "Admin"},
-        {"key": "super_admin", "label": "Super Admin"},
-    ])
+    roles: list[dict] = Field(
+        default_factory=lambda: [
+            {"key": "viewer", "label": "Viewer"},
+            {"key": "sales_manager", "label": "Sales Manager"},
+            {"key": "purchase_manager", "label": "Purchase Manager"},
+            {"key": "accounts_manager", "label": "Accounts Manager"},
+            {"key": "admin", "label": "Admin"},
+            {"key": "super_admin", "label": "Super Admin"},
+        ]
+    )
 
     base_dir: Path = Field(default_factory=lambda: Path.home() / "TradeDesk")
     data_dir: Path = Field(default_factory=lambda: Path.home() / "TradeDesk" / "data")
-    backup_dir: Path = Field(default_factory=lambda: Path.home() / "TradeDesk" / "backups")
+    backup_dir: Path = Field(
+        default_factory=lambda: Path.home() / "TradeDesk" / "backups"
+    )
     logs_dir: Path = Field(default_factory=lambda: Path.home() / "TradeDesk" / "logs")
 
     db_file_name: str = "tradedesk.db"
@@ -52,7 +57,9 @@ class Settings(BaseSettings):
 
     # Diagnostics upload & storage configuration
     diagnostics_enabled: bool = False
-    diagnostics_storage_dir: Path = Field(default_factory=lambda: Path.home() / "TradeDesk" / "diagnostics")
+    diagnostics_storage_dir: Path = Field(
+        default_factory=lambda: Path.home() / "TradeDesk" / "diagnostics"
+    )
     diagnostics_max_bytes: int = 5_242_880  # 5 MB
     diagnostics_retention_days: int = 30
     diagnostics_signature_skew_seconds: int = 300
@@ -84,7 +91,9 @@ class Settings(BaseSettings):
     exchange_rate_sync_interval_minutes: int = 60
     exchange_rate_source_url: str = "https://api.exchangerate.host/latest?base={base}"
     exchange_rate_default_base: str = "USD"
-    exchange_rate_default_targets: list[str] = Field(default_factory=lambda: ["USD", "EUR", "GBP", "CNY", "AED", "SGD", "JPY"]) 
+    exchange_rate_default_targets: list[str] = Field(
+        default_factory=lambda: ["USD", "EUR", "GBP", "CNY", "AED", "SGD", "JPY"]
+    )
 
     # SMS provider settings (console by default; Twilio optional)
     sms_provider: str | None = None
@@ -127,5 +136,10 @@ settings = Settings()
 
 
 def ensure_runtime_dirs() -> None:
-    for target in (settings.base_dir, settings.data_dir, settings.backup_dir, settings.logs_dir):
+    for target in (
+        settings.base_dir,
+        settings.data_dir,
+        settings.backup_dir,
+        settings.logs_dir,
+    ):
         target.mkdir(parents=True, exist_ok=True)

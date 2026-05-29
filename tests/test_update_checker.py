@@ -86,7 +86,10 @@ def test_update_workflow_downloads_verifies_and_launches(tmp_path, monkeypatch):
     if update_checker.os.name == "nt":
         assert popen_calls == [([str(expected_path)], False)]
     else:
-        assert popen_calls == [(["chmod", "+x", str(expected_path)], False), ([str(expected_path)], False)]
+        assert popen_calls == [
+            (["chmod", "+x", str(expected_path)], False),
+            ([str(expected_path)], False),
+        ]
     assert expected_path.read_bytes() == installer_bytes
 
 

@@ -1,4 +1,5 @@
-from PySide6.QtWidgets import QDialog, QDialogButtonBox, QFormLayout, QLineEdit, QVBoxLayout
+from PySide6.QtWidgets import (QDialog, QDialogButtonBox, QFormLayout,
+                               QLineEdit, QVBoxLayout)
 
 
 class FormDialog(QDialog):

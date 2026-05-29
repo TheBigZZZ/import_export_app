@@ -8,8 +8,8 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from ..models.supplier import Supplier
 from ..models.transaction import PartyType, Transaction
-from ..schemas.party import PartyLedgerEntry, PartyLedgerResponse, SupplierCreate, SupplierUpdate
-
+from ..schemas.party import (PartyLedgerEntry, PartyLedgerResponse,
+                             SupplierCreate, SupplierUpdate)
 
 MONEY = Decimal("0.01")
 
@@ -19,7 +19,9 @@ class SupplierService:
         self.db = db
 
     async def list_suppliers(self) -> list[Supplier]:
-        rows = await self.db.execute(select(Supplier).order_by(Supplier.supplier_code.asc()))
+        rows = await self.db.execute(
+            select(Supplier).order_by(Supplier.supplier_code.asc())
+        )
         suppliers = list(rows.scalars().all())
         for supplier in suppliers:
             supplier.current_balance = await self._calculate_current_balance(supplier)
@@ -50,7 +52,9 @@ class SupplierService:
         await self.db.refresh(supplier)
         return supplier
 
-    async def update_supplier(self, supplier: Supplier, payload: SupplierUpdate) -> Supplier:
+    async def update_supplier(
+        self, supplier: Supplier, payload: SupplierUpdate
+    ) -> Supplier:
         data = payload.model_dump(exclude_unset=True)
         if "email" in data and data["email"] is not None:
             data["email"] = str(data["email"])
@@ -64,7 +68,10 @@ class SupplierService:
 
     async def _calculate_current_balance(self, supplier: Supplier) -> Decimal:
         totals = await self.db.execute(
-            select(func.coalesce(func.sum(Transaction.debit), 0), func.coalesce(func.sum(Transaction.credit), 0)).where(
+            select(
+                func.coalesce(func.sum(Transaction.debit), 0),
+                func.coalesce(func.sum(Transaction.credit), 0),
+            ).where(
                 Transaction.party_type == PartyType.supplier,
                 Transaction.party_id == supplier.id,
             )
@@ -76,17 +83,25 @@ class SupplierService:
     async def ledger(self, supplier_id: int) -> PartyLedgerResponse:
         supplier = await self.get_supplier(supplier_id)
         if not supplier:
-            raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Supplier not found")
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND, detail="Supplier not found"
+            )
 
         rows = await self.db.execute(
             select(Transaction)
-            .where(Transaction.party_type == PartyType.supplier, Transaction.party_id == supplier.id)
+            .where(
+                Transaction.party_type == PartyType.supplier,
+                Transaction.party_id == supplier.id,
+            )
             .order_by(Transaction.transaction_date.desc(), Transaction.id.desc())
         )
         entries_rows = list(rows.scalars().all())
 
         total_row = await self.db.execute(
-            select(func.coalesce(func.sum(Transaction.debit), 0), func.coalesce(func.sum(Transaction.credit), 0)).where(
+            select(
+                func.coalesce(func.sum(Transaction.debit), 0),
+                func.coalesce(func.sum(Transaction.credit), 0),
+            ).where(
                 Transaction.party_type == PartyType.supplier,
                 Transaction.party_id == supplier.id,
             )
@@ -123,6 +138,7 @@ class SupplierService:
 
     async def bulk_delete_suppliers(self, ids: list[int]) -> list[int]:
         from sqlalchemy import delete
+
         failed: list[int] = []
         try:
             stmt = delete(Supplier).where(Supplier.id.in_(ids))

@@ -1,9 +1,9 @@
 from __future__ import annotations
 
-import asyncio
 from datetime import date
 
-from PySide6.QtWidgets import QComboBox, QFormLayout, QGroupBox, QHBoxLayout, QLineEdit, QMessageBox, QPushButton
+from PySide6.QtWidgets import (QComboBox, QFormLayout, QGroupBox, QHBoxLayout,
+                               QLineEdit, QMessageBox, QPushButton)
 
 from ..widgets.data_table import DataTable
 from .base import BaseModuleWidget
@@ -50,29 +50,41 @@ class VouchersModule(BaseModuleWidget):
         self.layout().addWidget(self.table)
 
     def refresh(self) -> None:
-        try:
-            response = asyncio.run(self.api_client.get("/api/vouchers"))
-            response.raise_for_status()
-            data = response.json()["items"]
-        except Exception as exc:
-            QMessageBox.warning(self, "Vouchers", str(exc))
-            return
+        def _do_fetch():
+            resp = self.api_client.sync_get("/api/vouchers")
+            resp.raise_for_status()
+            return resp.json()["items"]
 
-        rows = []
-        for voucher in data:
-            debit_total = sum(float(line["debit"]) for line in voucher["lines"])
-            credit_total = sum(float(line["credit"]) for line in voucher["lines"])
-            rows.append(
-                [
-                    voucher["voucher_no"],
-                    voucher["voucher_type"],
-                    voucher["transaction_date"],
-                    f"{debit_total:.2f}",
-                    f"{credit_total:.2f}",
-                    str(len(voucher["lines"])),
-                ]
-            )
-        self.table.set_rows(["Voucher No", "Type", "Date", "Debit", "Credit", "Lines"], rows, stretch_columns={0})
+        def _on_result(data):
+            try:
+                rows = []
+                for voucher in data:
+                    debit_total = sum(float(line["debit"]) for line in voucher["lines"])
+                    credit_total = sum(
+                        float(line["credit"]) for line in voucher["lines"]
+                    )
+                    rows.append(
+                        [
+                            voucher["voucher_no"],
+                            voucher["voucher_type"],
+                            voucher["transaction_date"],
+                            f"{debit_total:.2f}",
+                            f"{credit_total:.2f}",
+                            str(len(voucher["lines"])),
+                        ]
+                    )
+                self.table.set_rows(
+                    ["Voucher No", "Type", "Date", "Debit", "Credit", "Lines"],
+                    rows,
+                    stretch_columns={0},
+                )
+            except Exception as exc:
+                QMessageBox.warning(self, "Vouchers", str(exc))
+
+        def _on_error(exc):
+            QMessageBox.warning(self, "Vouchers", str(exc))
+
+        self.run_blocking(_do_fetch, on_result=_on_result, on_error=_on_error)
 
     def create_voucher(self) -> None:
         try:
@@ -88,16 +100,32 @@ class VouchersModule(BaseModuleWidget):
             "transaction_date": date.today().isoformat(),
             "description": self.description.text().strip() or None,
             "lines": [
-                {"account_id": debit_acc, "debit": amount, "credit": 0, "description": self.description.text().strip()},
-                {"account_id": credit_acc, "debit": 0, "credit": amount, "description": self.description.text().strip()},
+                {
+                    "account_id": debit_acc,
+                    "debit": amount,
+                    "credit": 0,
+                    "description": self.description.text().strip(),
+                },
+                {
+                    "account_id": credit_acc,
+                    "debit": 0,
+                    "credit": amount,
+                    "description": self.description.text().strip(),
+                },
             ],
         }
-        try:
-            response = asyncio.run(self.api_client.post("/api/vouchers", json=payload))
-            response.raise_for_status()
-        except Exception as exc:
+
+        def _do_post():
+            resp = self.api_client.sync_post("/api/vouchers", json=payload)
+            resp.raise_for_status()
+            return resp
+
+        def _on_result(_):
+            self.amount.clear()
+            self.description.clear()
+            self.refresh()
+
+        def _on_error(exc):
             QMessageBox.warning(self, "Post Voucher", str(exc))
-            return
-        self.amount.clear()
-        self.description.clear()
-        self.refresh()
+
+        self.run_blocking(_do_post, on_result=_on_result, on_error=_on_error)

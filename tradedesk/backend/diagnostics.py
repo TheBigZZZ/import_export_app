@@ -3,18 +3,18 @@ from __future__ import annotations
 import hmac
 import os
 import secrets
+import smtplib
 import uuid
 from datetime import datetime, timedelta, timezone
-from fastapi import APIRouter, File, UploadFile, Form, HTTPException, Depends, Header
+from email.message import EmailMessage
 from pathlib import Path
 from typing import Optional
-from datetime import datetime, timedelta
+
+import httpx
+from fastapi import (APIRouter, Depends, File, Form, Header, HTTPException,
+                     UploadFile)
 
 from .config import settings
-import json
-import httpx
-import smtplib
-from email.message import EmailMessage
 
 router = APIRouter()
 
@@ -24,7 +24,11 @@ def _ensure_storage_dir() -> Path:
     target.mkdir(parents=True, exist_ok=True)
     (target / "installs").mkdir(exist_ok=True)
     # nonces dir (optional)
-    nonces = Path(settings.diagnostics_nonces_dir) if settings.diagnostics_nonces_dir else (target / "nonces")
+    nonces = (
+        Path(settings.diagnostics_nonces_dir)
+        if settings.diagnostics_nonces_dir
+        else (target / "nonces")
+    )
     nonces.mkdir(parents=True, exist_ok=True)
     return target
 
@@ -46,7 +50,10 @@ async def register_install(
     allowed if diagnostics_allow_self_register is True or the correct
     diagnostics_admin_key is provided.
     """
-    if not (settings.diagnostics_allow_self_register or (admin_key and admin_key == settings.diagnostics_admin_key)):
+    if not (
+        settings.diagnostics_allow_self_register
+        or (admin_key and admin_key == settings.diagnostics_admin_key)
+    ):
         raise HTTPException(status_code=403, detail="Registration disabled")
 
     if not install_id:
@@ -64,7 +71,9 @@ async def register_install(
     return {"install_id": install_id, "install_secret": secret}
 
 
-def _verify_signature(storage: Path, install_id: str, signature: str, payload: bytes) -> bool:
+def _verify_signature(
+    storage: Path, install_id: str, signature: str, payload: bytes
+) -> bool:
     path = _install_secret_path(storage, install_id)
     if not path.exists():
         return False
@@ -77,7 +86,14 @@ def _verify_signature(storage: Path, install_id: str, signature: str, payload: b
     return hmac.compare_digest(mac, signature)
 
 
-def _verify_signature_with_headers(storage: Path, install_id: str, signature: str, timestamp: Optional[str], nonce: Optional[str], body: bytes) -> bool:
+def _verify_signature_with_headers(
+    storage: Path,
+    install_id: str,
+    signature: str,
+    timestamp: Optional[str],
+    nonce: Optional[str],
+    body: bytes,
+) -> bool:
     # If timestamp/nonce provided, reconstruct payload and check skew
     # Expect timestamp like 2026-05-25T12:34:56Z
     if timestamp and nonce:
@@ -91,7 +107,11 @@ def _verify_signature_with_headers(storage: Path, install_id: str, signature: st
         if skew > settings.diagnostics_signature_skew_seconds:
             return False
         # Check and persist nonce to prevent replay
-        nonces_dir = Path(settings.diagnostics_nonces_dir) if settings.diagnostics_nonces_dir else (storage / "nonces")
+        nonces_dir = (
+            Path(settings.diagnostics_nonces_dir)
+            if settings.diagnostics_nonces_dir
+            else (storage / "nonces")
+        )
         nonces_dir.mkdir(parents=True, exist_ok=True)
         nonce_path = nonces_dir / nonce
         try:
@@ -114,7 +134,9 @@ def purge_old_diagnostics() -> None:
     storage = Path(settings.diagnostics_storage_dir)
     if not storage.exists():
         return
-    cutoff = datetime.now(timezone.utc) - timedelta(days=settings.diagnostics_retention_days)
+    cutoff = datetime.now(timezone.utc) - timedelta(
+        days=settings.diagnostics_retention_days
+    )
     for p in storage.iterdir():
         try:
             if p.is_file():
@@ -125,9 +147,15 @@ def purge_old_diagnostics() -> None:
             # ignore individual failures
             continue
     # purge nonces older than TTL
-    nonces_dir = Path(settings.diagnostics_nonces_dir) if settings.diagnostics_nonces_dir else (storage / "nonces")
+    nonces_dir = (
+        Path(settings.diagnostics_nonces_dir)
+        if settings.diagnostics_nonces_dir
+        else (storage / "nonces")
+    )
     if nonces_dir.exists():
-        nonce_cutoff = datetime.now(timezone.utc) - timedelta(days=settings.diagnostics_nonces_ttl_days)
+        nonce_cutoff = datetime.now(timezone.utc) - timedelta(
+            days=settings.diagnostics_nonces_ttl_days
+        )
         for n in nonces_dir.iterdir():
             try:
                 if n.is_file():
@@ -160,7 +188,14 @@ async def upload_diagnostics(
 
     # If install headers are provided, verify HMAC signature. Support timestamp+nonce.
     if x_install_id and x_signature:
-        ok = _verify_signature_with_headers(storage, x_install_id, x_signature, x_signature_timestamp, x_signature_nonce, content)
+        ok = _verify_signature_with_headers(
+            storage,
+            x_install_id,
+            x_signature,
+            x_signature_timestamp,
+            x_signature_nonce,
+            content,
+        )
         if not ok:
             raise HTTPException(status_code=401, detail="Invalid signature")
 
@@ -207,18 +242,41 @@ async def upload_diagnostics(
 
     # Optionally send email notification
     try:
-        if settings.diagnostics_notify_via_email and settings.diagnostics_notify_email_to:
+        if (
+            settings.diagnostics_notify_via_email
+            and settings.diagnostics_notify_email_to
+        ):
             msg = EmailMessage()
-            msg["From"] = settings.diagnostics_notify_email_from or "noreply@example.com"
+            msg["From"] = (
+                settings.diagnostics_notify_email_from or "noreply@example.com"
+            )
             msg["To"] = settings.diagnostics_notify_email_to
             msg["Subject"] = f"New diagnostics upload: {ticket}"
-            body_txt = f"Ticket: {ticket}\nReceived: {ts}\nFile: {safe_name}\nInstall: {x_install_id or ''}\nContact: {contact_email or ''}\nDescription: {description or ''}\n"
+            body_lines = [
+                f"Ticket: {ticket}",
+                f"Received: {ts}",
+                f"File: {safe_name}",
+                f"Install: {x_install_id or ''}",
+                f"Contact: {contact_email or ''}",
+                f"Description: {description or ''}",
+            ]
+            body_txt = "\n".join(body_lines) + "\n"
             msg.set_content(body_txt)
             try:
-                with smtplib.SMTP(settings.diagnostics_smtp_host or "localhost", settings.diagnostics_smtp_port, timeout=10) as smtp:
-                    if settings.diagnostics_smtp_user and settings.diagnostics_smtp_password:
+                with smtplib.SMTP(
+                    settings.diagnostics_smtp_host or "localhost",
+                    settings.diagnostics_smtp_port,
+                    timeout=10,
+                ) as smtp:
+                    if (
+                        settings.diagnostics_smtp_user
+                        and settings.diagnostics_smtp_password
+                    ):
                         smtp.starttls()
-                        smtp.login(settings.diagnostics_smtp_user, settings.diagnostics_smtp_password)
+                        smtp.login(
+                            settings.diagnostics_smtp_user,
+                            settings.diagnostics_smtp_password,
+                        )
                     smtp.send_message(msg)
             except Exception:
                 # swallow email errors

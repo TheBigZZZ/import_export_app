@@ -7,7 +7,6 @@ from sqlalchemy import engine_from_config, pool
 
 from tradedesk.backend.config import settings
 from tradedesk.backend.database import Base
-from tradedesk.backend.models import account, audit_log, bank, customer, expense, import_shipment, product, purchase, sales, supplier, transaction, user
 
 config = context.config
 if config.config_file_name is not None:
@@ -39,7 +38,9 @@ def run_migrations_online() -> None:
     )
 
     with connectable.connect() as connection:
-        context.configure(connection=connection, target_metadata=target_metadata, compare_type=True)
+        context.configure(
+            connection=connection, target_metadata=target_metadata, compare_type=True
+        )
 
         with context.begin_transaction():
             context.run_migrations()

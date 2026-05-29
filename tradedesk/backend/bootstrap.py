@@ -29,8 +29,8 @@ DEFAULT_ACCOUNTS = [
 
 async def seed_defaults() -> None:
     async with AsyncSessionLocal() as session:
-        users_q = await session.execute(select(User.id))
-        has_users = users_q.first() is not None
+        # intentionally execute a lightweight query to warm DB connection
+        await session.execute(select(User.id))
 
         accounts_q = await session.execute(select(ChartOfAccount.id))
         has_accounts = accounts_q.first() is not None

@@ -1,8 +1,10 @@
 from __future__ import annotations
 
-import asyncio
+import os
 
-from PySide6.QtWidgets import QCheckBox, QFormLayout, QGroupBox, QGridLayout, QHBoxLayout, QLabel, QLineEdit, QMessageBox, QPushButton, QScrollArea, QVBoxLayout, QWidget
+from PySide6.QtWidgets import (QCheckBox, QFormLayout, QGridLayout, QGroupBox,
+                               QHBoxLayout, QLabel, QLineEdit, QMessageBox,
+                               QPushButton, QScrollArea, QVBoxLayout, QWidget)
 
 from ..error_messages import friendly_exception_message, friendly_http_error
 from ..widgets.data_table import DataTable
@@ -105,7 +107,7 @@ class SettingsModule(BaseModuleWidget):
         self.rate_value = QLineEdit()
         self.rate_effective = QLineEdit()
         self.sync_interval_input = QLineEdit()
-        self.sync_interval_input.setPlaceholderText('Minutes')
+        self.sync_interval_input.setPlaceholderText("Minutes")
         self.auto_sync_checkbox = QCheckBox("Enable auto-sync exchange rates")
         create_rate_btn = QPushButton("Create Rate")
         create_rate_btn.clicked.connect(self.create_rate)
@@ -157,35 +159,109 @@ class SettingsModule(BaseModuleWidget):
         self.load_backups()
 
     def load_settings(self) -> None:
-        try:
-            response = asyncio.run(self.api_client.get("/api/settings"))
-            response.raise_for_status()
-            data = response.json()
-        except Exception as exc:
-            QMessageBox.warning(self, "Settings", friendly_exception_message(exc, "Load settings"))
+        if os.environ.get("TRADEDESK_USE_QTASYNCIO"):
+
+            async def _async_load():
+                resp = await self.api_client.get("/api/settings")
+                resp.raise_for_status()
+                return resp.json()
+
+            def _on_result(data):
+                try:
+                    self.company_name.setText(data.get("company_name") or "")
+                    self.company_address.setText(data.get("company_address") or "")
+                    self.company_phone.setText(data.get("company_phone") or "")
+                    self.company_email.setText(data.get("company_email") or "")
+                    self.allow_negative_stock.setChecked(
+                        bool(data.get("allow_negative_stock"))
+                    )
+                    self.smtp_host.setText(data.get("diagnostics_smtp_host") or "")
+                    self.smtp_port.setText(str(data.get("diagnostics_smtp_port") or ""))
+                    self.smtp_user.setText(data.get("diagnostics_smtp_user") or "")
+                    if data.get("diagnostics_smtp_password_set"):
+                        self.smtp_password.setText("")
+                        self.smtp_password.setPlaceholderText(
+                            "Configured (leave blank to keep existing)"
+                        )
+                    else:
+                        self.smtp_password.setText("")
+                        self.smtp_password.setPlaceholderText("Enter SMTP password")
+                    self.notify_from.setText(
+                        data.get("diagnostics_notify_email_from") or ""
+                    )
+                    self.notify_to.setText(
+                        data.get("diagnostics_notify_email_to") or ""
+                    )
+                    self.auto_sync_checkbox.setChecked(
+                        bool(data.get("exchange_rate_auto_sync", False))
+                    )
+                    self.sync_interval_input.setText(
+                        str(data.get("exchange_rate_sync_interval_minutes") or "")
+                    )
+                except Exception as exc:
+                    QMessageBox.warning(
+                        self,
+                        "Settings",
+                        friendly_exception_message(exc, "Load settings"),
+                    )
+
+            def _on_error(exc):
+                QMessageBox.warning(
+                    self, "Settings", friendly_exception_message(exc, "Load settings")
+                )
+
+            self.run_async(_async_load(), on_result=_on_result, on_error=_on_error)
             return
 
-        self.company_name.setText(data.get("company_name") or "")
-        self.company_address.setText(data.get("company_address") or "")
-        self.company_phone.setText(data.get("company_phone") or "")
-        self.company_email.setText(data.get("company_email") or "")
-        self.allow_negative_stock.setChecked(bool(data.get("allow_negative_stock")))
-        # SMTP fields
-        self.smtp_host.setText(data.get("diagnostics_smtp_host") or "")
-        self.smtp_port.setText(str(data.get("diagnostics_smtp_port") or ""))
-        self.smtp_user.setText(data.get("diagnostics_smtp_user") or "")
-        # Do not expose the SMTP password; show whether it's configured
-        if data.get("diagnostics_smtp_password_set"):
-            self.smtp_password.setText("")
-            self.smtp_password.setPlaceholderText("Configured (leave blank to keep existing)")
-        else:
-            self.smtp_password.setText("")
-            self.smtp_password.setPlaceholderText("Enter SMTP password")
-        self.notify_from.setText(data.get("diagnostics_notify_email_from") or "")
-        self.notify_to.setText(data.get("diagnostics_notify_email_to") or "")
-        # exchange-rate auto-sync
-        self.auto_sync_checkbox.setChecked(bool(data.get('exchange_rate_auto_sync', False)))
-        self.sync_interval_input.setText(str(data.get('exchange_rate_sync_interval_minutes') or ''))
+        def _do_load():
+            resp = self.api_client.sync_get("/api/settings")
+            resp.raise_for_status()
+            return resp.json()
+
+        def _on_result(data):
+            try:
+                self.company_name.setText(data.get("company_name") or "")
+                self.company_address.setText(data.get("company_address") or "")
+                self.company_phone.setText(data.get("company_phone") or "")
+                self.company_email.setText(data.get("company_email") or "")
+                self.allow_negative_stock.setChecked(
+                    bool(data.get("allow_negative_stock"))
+                )
+                # SMTP fields
+                self.smtp_host.setText(data.get("diagnostics_smtp_host") or "")
+                self.smtp_port.setText(str(data.get("diagnostics_smtp_port") or ""))
+                self.smtp_user.setText(data.get("diagnostics_smtp_user") or "")
+                # Do not expose the SMTP password; show whether it's configured
+                if data.get("diagnostics_smtp_password_set"):
+                    self.smtp_password.setText("")
+                    self.smtp_password.setPlaceholderText(
+                        "Configured (leave blank to keep existing)"
+                    )
+                else:
+                    self.smtp_password.setText("")
+                    self.smtp_password.setPlaceholderText("Enter SMTP password")
+                self.notify_from.setText(
+                    data.get("diagnostics_notify_email_from") or ""
+                )
+                self.notify_to.setText(data.get("diagnostics_notify_email_to") or "")
+                # exchange-rate auto-sync
+                self.auto_sync_checkbox.setChecked(
+                    bool(data.get("exchange_rate_auto_sync", False))
+                )
+                self.sync_interval_input.setText(
+                    str(data.get("exchange_rate_sync_interval_minutes") or "")
+                )
+            except Exception as exc:
+                QMessageBox.warning(
+                    self, "Settings", friendly_exception_message(exc, "Load settings")
+                )
+
+        def _on_error(exc):
+            QMessageBox.warning(
+                self, "Settings", friendly_exception_message(exc, "Load settings")
+            )
+
+        self.run_blocking(_do_load, on_result=_on_result, on_error=_on_error)
 
     def save_settings(self) -> None:
         payload = {
@@ -196,63 +272,268 @@ class SettingsModule(BaseModuleWidget):
             "allow_negative_stock": self.allow_negative_stock.isChecked(),
             # SMTP
             "diagnostics_smtp_host": self.smtp_host.text().strip() or None,
-            "diagnostics_smtp_port": int(self.smtp_port.text().strip()) if self.smtp_port.text().strip() else None,
+            "diagnostics_smtp_port": (
+                int(self.smtp_port.text().strip())
+                if self.smtp_port.text().strip()
+                else None
+            ),
             "diagnostics_smtp_user": self.smtp_user.text().strip() or None,
             "diagnostics_smtp_password": self.smtp_password.text() or None,
             "diagnostics_notify_email_from": self.notify_from.text().strip() or None,
             "diagnostics_notify_email_to": self.notify_to.text().strip() or None,
             "exchange_rate_auto_sync": bool(self.auto_sync_checkbox.isChecked()),
-            "exchange_rate_sync_interval_minutes": int(self.sync_interval_input.text().strip()) if self.sync_interval_input.text().strip().isdigit() else None,
+            "exchange_rate_sync_interval_minutes": (
+                int(self.sync_interval_input.text().strip())
+                if self.sync_interval_input.text().strip().isdigit()
+                else None
+            ),
         }
-        try:
-            response = asyncio.run(self.api_client.put("/api/settings", json=payload))
-            response.raise_for_status()
-        except Exception as exc:
-            QMessageBox.warning(self, "Settings", friendly_exception_message(exc, "Save settings"))
+
+        if os.environ.get("TRADEDESK_USE_QTASYNCIO"):
+
+            async def _async_save():
+                resp = await self.api_client.put("/api/settings", json=payload)
+                resp.raise_for_status()
+                return resp
+
+            def _on_result(_):
+                QMessageBox.information(self, "Settings", "Settings saved")
+
+            def _on_error(exc):
+                QMessageBox.warning(
+                    self, "Settings", friendly_exception_message(exc, "Save settings")
+                )
+
+            self.run_async(_async_save(), on_result=_on_result, on_error=_on_error)
             return
-        QMessageBox.information(self, "Settings", "Settings saved")
+
+        def _do_save():
+            resp = self.api_client.sync_put("/api/settings", json=payload)
+            resp.raise_for_status()
+            return resp
+
+        def _on_result(_):
+            QMessageBox.information(self, "Settings", "Settings saved")
+
+        def _on_error(exc):
+            QMessageBox.warning(
+                self, "Settings", friendly_exception_message(exc, "Save settings")
+            )
+
+        self.run_blocking(_do_save, on_result=_on_result, on_error=_on_error)
 
     def send_test_email(self) -> None:
         to = self.notify_to.text().strip()
         if not to:
-            QMessageBox.warning(self, "Test Email", "Enter a recipient email in 'To Address'")
+            QMessageBox.warning(
+                self, "Test Email", "Enter a recipient email in 'To Address'"
+            )
             return
-        payload = {"to": to, "subject": "Test Email from TradeDesk", "body": "This is a test email from your TradeDesk instance."}
-        try:
-            response = asyncio.run(self.api_client.post("/api/settings/email/test", json=payload))
+        payload = {
+            "to": to,
+            "subject": "Test Email from TradeDesk",
+            "body": "This is a test email from your TradeDesk instance.",
+        }
+
+        if os.environ.get("TRADEDESK_USE_QTASYNCIO"):
+
+            async def _async_send():
+                resp = await self.api_client.post(
+                    "/api/settings/email/test", json=payload
+                )
+                return resp
+
+            def _on_result(response):
+                if response.status_code == 200:
+                    QMessageBox.information(
+                        self, "Test Email", "Test email sent (or queued)"
+                    )
+                else:
+                    QMessageBox.warning(
+                        self,
+                        "Test Email",
+                        friendly_http_error(response, "Send test email"),
+                    )
+
+            def _on_error(exc):
+                QMessageBox.warning(
+                    self,
+                    "Test Email",
+                    friendly_exception_message(exc, "Send test email"),
+                )
+
+            self.run_async(_async_send(), on_result=_on_result, on_error=_on_error)
+            return
+
+        def _do_send():
+            return self.api_client.sync_post("/api/settings/email/test", json=payload)
+
+        def _on_result(response):
             if response.status_code == 200:
-                QMessageBox.information(self, "Test Email", "Test email sent (or queued)")
+                QMessageBox.information(
+                    self, "Test Email", "Test email sent (or queued)"
+                )
             else:
-                QMessageBox.warning(self, "Test Email", friendly_http_error(response, "Send test email"))
-        except Exception as exc:
-            QMessageBox.warning(self, "Test Email", friendly_exception_message(exc, "Send test email"))
+                QMessageBox.warning(
+                    self, "Test Email", friendly_http_error(response, "Send test email")
+                )
+
+        def _on_error(exc):
+            QMessageBox.warning(
+                self, "Test Email", friendly_exception_message(exc, "Send test email")
+            )
+
+        self.run_blocking(_do_send, on_result=_on_result, on_error=_on_error)
 
     def load_backups(self) -> None:
-        try:
-            response = asyncio.run(self.api_client.get("/api/settings/backups"))
-            response.raise_for_status()
-            rows = response.json()
-        except Exception as exc:
-            QMessageBox.warning(self, "Backups", friendly_exception_message(exc, "Load backups"))
+        if os.environ.get("TRADEDESK_USE_QTASYNCIO"):
+
+            async def _async_load_backups():
+                resp = await self.api_client.get("/api/settings/backups")
+                resp.raise_for_status()
+                return resp.json()
+
+            def _on_result(rows):
+                try:
+                    table_rows = [
+                        [
+                            item["file_name"],
+                            item["created_at"],
+                            str(item["size_bytes"]),
+                            item["file_path"],
+                        ]
+                        for item in rows
+                    ]
+                    self.backups_table.set_rows(
+                        ["File", "Created", "Size", "Path"],
+                        table_rows,
+                        stretch_columns={3},
+                    )
+                except Exception as exc:
+                    QMessageBox.warning(
+                        self, "Backups", friendly_exception_message(exc, "Load backups")
+                    )
+
+            def _on_error(exc):
+                QMessageBox.warning(
+                    self, "Backups", friendly_exception_message(exc, "Load backups")
+                )
+
+            self.run_async(
+                _async_load_backups(), on_result=_on_result, on_error=_on_error
+            )
             return
 
-        table_rows = [
-            [item["file_name"], item["created_at"], str(item["size_bytes"]), item["file_path"]]
-            for item in rows
-        ]
-        self.backups_table.set_rows(["File", "Created", "Size", "Path"], table_rows, stretch_columns={3})
+        def _do_load_backups():
+            resp = self.api_client.sync_get("/api/settings/backups")
+            resp.raise_for_status()
+            return resp.json()
+
+        def _on_result(rows):
+            try:
+                table_rows = [
+                    [
+                        item["file_name"],
+                        item["created_at"],
+                        str(item["size_bytes"]),
+                        item["file_path"],
+                    ]
+                    for item in rows
+                ]
+                self.backups_table.set_rows(
+                    ["File", "Created", "Size", "Path"], table_rows, stretch_columns={3}
+                )
+            except Exception as exc:
+                QMessageBox.warning(
+                    self, "Backups", friendly_exception_message(exc, "Load backups")
+                )
+
+        def _on_error(exc):
+            QMessageBox.warning(
+                self, "Backups", friendly_exception_message(exc, "Load backups")
+            )
+
+        self.run_blocking(_do_load_backups, on_result=_on_result, on_error=_on_error)
 
     def load_rates(self) -> None:
-        try:
-            response = asyncio.run(self.api_client.get('/api/exchange-rates'))
-            response.raise_for_status()
-            data = response.json()
-        except Exception as exc:
-            QMessageBox.warning(self, 'Exchange Rates', friendly_exception_message(exc, 'Load exchange rates'))
+        if os.environ.get("TRADEDESK_USE_QTASYNCIO"):
+
+            async def _async_load_rates():
+                resp = await self.api_client.get("/api/exchange-rates")
+                resp.raise_for_status()
+                return resp.json()
+
+            def _on_result(data):
+                try:
+                    rows = [
+                        [
+                            str(item.get("id") or ""),
+                            item.get("currency_from"),
+                            item.get("currency_to"),
+                            str(item.get("rate")),
+                            item.get("effective_date"),
+                        ]
+                        for item in data
+                    ]
+                    self.rates_table.set_rows(
+                        ["ID", "From", "To", "Rate", "Effective"],
+                        rows,
+                        stretch_columns={4},
+                    )
+                except Exception as exc:
+                    QMessageBox.warning(
+                        self,
+                        "Exchange Rates",
+                        friendly_exception_message(exc, "Load exchange rates"),
+                    )
+
+            def _on_error(exc):
+                QMessageBox.warning(
+                    self,
+                    "Exchange Rates",
+                    friendly_exception_message(exc, "Load exchange rates"),
+                )
+
+            self.run_async(
+                _async_load_rates(), on_result=_on_result, on_error=_on_error
+            )
             return
 
-        rows = [[str(item.get('id') or ''), item.get('currency_from'), item.get('currency_to'), str(item.get('rate')), item.get('effective_date')] for item in data]
-        self.rates_table.set_rows(["ID", "From", "To", "Rate", "Effective"], rows, stretch_columns={4})
+        def _do_load_rates():
+            resp = self.api_client.sync_get("/api/exchange-rates")
+            resp.raise_for_status()
+            return resp.json()
+
+        def _on_result(data):
+            try:
+                rows = [
+                    [
+                        str(item.get("id") or ""),
+                        item.get("currency_from"),
+                        item.get("currency_to"),
+                        str(item.get("rate")),
+                        item.get("effective_date"),
+                    ]
+                    for item in data
+                ]
+                self.rates_table.set_rows(
+                    ["ID", "From", "To", "Rate", "Effective"], rows, stretch_columns={4}
+                )
+            except Exception as exc:
+                QMessageBox.warning(
+                    self,
+                    "Exchange Rates",
+                    friendly_exception_message(exc, "Load exchange rates"),
+                )
+
+        def _on_error(exc):
+            QMessageBox.warning(
+                self,
+                "Exchange Rates",
+                friendly_exception_message(exc, "Load exchange rates"),
+            )
+
+        self.run_blocking(_do_load_rates, on_result=_on_result, on_error=_on_error)
 
     def create_rate(self) -> None:
         frm = self.rate_from.text().strip()
@@ -260,45 +541,164 @@ class SettingsModule(BaseModuleWidget):
         rate = self.rate_value.text().strip()
         eff = self.rate_effective.text().strip() or None
         if not frm or not to or not rate:
-            QMessageBox.warning(self, 'Create Rate', 'Enter currency from/to and rate')
+            QMessageBox.warning(self, "Create Rate", "Enter currency from/to and rate")
             return
-        try:
-            payload = {'currency_from': frm, 'currency_to': to, 'rate': float(rate)}
-            if eff:
-                payload['effective_date'] = eff
-            response = asyncio.run(self.api_client.post('/api/exchange-rates', json=payload))
+
+        if os.environ.get("TRADEDESK_USE_QTASYNCIO"):
+
+            async def _async_create_rate():
+                resp = await self.api_client.post(
+                    "/api/exchange-rates",
+                    json={
+                        "currency_from": frm,
+                        "currency_to": to,
+                        "rate": rate,
+                        "effective_date": eff,
+                    },
+                )
+                return resp
+
+            def _on_result(response):
+                if response.status_code in (200, 201):
+                    QMessageBox.information(self, "Exchange Rates", "Rate created")
+                    self.load_rates()
+                else:
+                    QMessageBox.warning(
+                        self,
+                        "Exchange Rates",
+                        friendly_http_error(response, "Create exchange rate"),
+                    )
+
+            def _on_error(exc):
+                QMessageBox.warning(
+                    self,
+                    "Exchange Rates",
+                    friendly_exception_message(exc, "Create exchange rate"),
+                )
+
+            self.run_async(
+                _async_create_rate(), on_result=_on_result, on_error=_on_error
+            )
+            return
+
+        def _do_create_rate():
+            resp = self.api_client.sync_post(
+                "/api/exchange-rates",
+                json={
+                    "currency_from": frm,
+                    "currency_to": to,
+                    "rate": rate,
+                    "effective_date": eff,
+                },
+            )
+            return resp
+
+        def _on_result(response):
             if response.status_code in (200, 201):
-                QMessageBox.information(self, 'Exchange Rates', 'Rate created')
+                QMessageBox.information(self, "Exchange Rates", "Rate created")
                 self.load_rates()
             else:
-                QMessageBox.warning(self, 'Exchange Rates', friendly_http_error(response, 'Create exchange rate'))
-        except Exception as exc:
-            QMessageBox.warning(self, 'Exchange Rates', friendly_exception_message(exc, 'Create exchange rate'))
+                QMessageBox.warning(
+                    self,
+                    "Exchange Rates",
+                    friendly_http_error(response, "Create exchange rate"),
+                )
+
+        def _on_error(exc):
+            QMessageBox.warning(
+                self,
+                "Exchange Rates",
+                friendly_exception_message(exc, "Create exchange rate"),
+            )
+
+        self.run_blocking(_do_create_rate, on_result=_on_result, on_error=_on_error)
 
     def create_backup(self) -> None:
-        try:
-            response = asyncio.run(self.api_client.post("/api/settings/backups", json={}))
-            response.raise_for_status()
-        except Exception as exc:
-            QMessageBox.warning(self, "Backups", friendly_exception_message(exc, "Create backup"))
+        if os.environ.get("TRADEDESK_USE_QTASYNCIO"):
+
+            async def _async_create():
+                resp = await self.api_client.post("/api/settings/backups", json={})
+                resp.raise_for_status()
+                return resp
+
+            def _on_result(_):
+                QMessageBox.information(self, "Backups", "Backup created")
+                self.load_backups()
+
+            def _on_error(exc):
+                QMessageBox.warning(
+                    self, "Backups", friendly_exception_message(exc, "Create backup")
+                )
+
+            self.run_async(_async_create(), on_result=_on_result, on_error=_on_error)
             return
-        QMessageBox.information(self, "Backups", "Backup created")
-        self.load_backups()
+
+        def _do_create():
+            resp = self.api_client.sync_post("/api/settings/backups", json={})
+            resp.raise_for_status()
+            return resp
+
+        def _on_result(_):
+            QMessageBox.information(self, "Backups", "Backup created")
+            self.load_backups()
+
+        def _on_error(exc):
+            QMessageBox.warning(
+                self, "Backups", friendly_exception_message(exc, "Create backup")
+            )
+
+        self.run_blocking(_do_create, on_result=_on_result, on_error=_on_error)
 
     def send_test_sms(self) -> None:
         to = self.sms_to.text().strip()
         msg = self.sms_message.text().strip()
         if not to:
-            QMessageBox.warning(self, 'Test SMS', 'Enter a destination number')
+            QMessageBox.warning(self, "Test SMS", "Enter a destination number")
             return
-        try:
-            response = asyncio.run(self.api_client.post('/api/settings/sms/test', json={'to': to, 'message': msg}))
-            if response.status_code == 200 and response.json().get('ok'):
-                QMessageBox.information(self, 'Test SMS', 'SMS sent (or logged)')
+
+        if os.environ.get("TRADEDESK_USE_QTASYNCIO"):
+
+            async def _async_sms():
+                resp = await self.api_client.post(
+                    "/api/settings/sms/test", json={"to": to, "message": msg}
+                )
+                return resp
+
+            def _on_result(response):
+                if response.status_code == 200:
+                    QMessageBox.information(self, "Test SMS", "SMS sent (or queued)")
+                else:
+                    QMessageBox.warning(
+                        self, "Test SMS", friendly_http_error(response, "Send test SMS")
+                    )
+
+            def _on_error(exc):
+                QMessageBox.warning(
+                    self, "Test SMS", friendly_exception_message(exc, "Send test SMS")
+                )
+
+            self.run_async(_async_sms(), on_result=_on_result, on_error=_on_error)
+            return
+
+        def _do_sms():
+            return self.api_client.sync_post(
+                "/api/settings/sms/test", json={"to": to, "message": msg}
+            )
+
+        def _on_result(response):
+            if response.status_code == 200:
+                QMessageBox.information(self, "Test SMS", "SMS sent (or queued)")
             else:
-                QMessageBox.warning(self, 'Test SMS', friendly_http_error(response, 'Send test SMS'))
-        except Exception as exc:
-            QMessageBox.warning(self, 'Test SMS', friendly_exception_message(exc, 'Send test SMS'))
+                QMessageBox.warning(
+                    self, "Test SMS", friendly_http_error(response, "Send test SMS")
+                )
+
+        def _on_error(exc):
+            QMessageBox.warning(
+                self, "Test SMS", friendly_exception_message(exc, "Send test SMS")
+            )
+
+        self.run_blocking(_do_sms, on_result=_on_result, on_error=_on_error)
 
     def restore_backup(self) -> None:
         file_name = self.restore_file_name.text().strip()
@@ -306,10 +706,41 @@ class SettingsModule(BaseModuleWidget):
             QMessageBox.warning(self, "Restore", "Enter a backup file name")
             return
 
-        try:
-            response = asyncio.run(self.api_client.post("/api/settings/backups/restore", json={"file_name": file_name}))
-            response.raise_for_status()
-        except Exception as exc:
-            QMessageBox.warning(self, "Restore", friendly_exception_message(exc, "Restore backup"))
+        if os.environ.get("TRADEDESK_USE_QTASYNCIO"):
+
+            async def _async_restore():
+                resp = await self.api_client.post(
+                    "/api/settings/backups/restore", json={"file_name": file_name}
+                )
+                resp.raise_for_status()
+                return resp
+
+            def _on_result(_):
+                QMessageBox.information(self, "Restore", "Restore started")
+                self.load_backups()
+
+            def _on_error(exc):
+                QMessageBox.warning(
+                    self, "Restore", friendly_exception_message(exc, "Restore backup")
+                )
+
+            self.run_async(_async_restore(), on_result=_on_result, on_error=_on_error)
             return
-        QMessageBox.information(self, "Restore", "Backup restored. Restart app if data view is stale.")
+
+        def _do_restore():
+            resp = self.api_client.sync_post(
+                "/api/settings/backups/restore", json={"file_name": file_name}
+            )
+            resp.raise_for_status()
+            return resp
+
+        def _on_result(_):
+            QMessageBox.information(self, "Restore", "Restore started")
+            self.load_backups()
+
+        def _on_error(exc):
+            QMessageBox.warning(
+                self, "Restore", friendly_exception_message(exc, "Restore backup")
+            )
+
+        self.run_blocking(_do_restore, on_result=_on_result, on_error=_on_error)

@@ -1,9 +1,9 @@
 from __future__ import annotations
 
-import asyncio
+import os
 
-from PySide6.QtWidgets import QFormLayout, QGroupBox, QHBoxLayout, QLabel, QLineEdit, QMessageBox, QPushButton, QWidget
-import re
+from PySide6.QtWidgets import (QFormLayout, QGroupBox, QHBoxLayout, QLabel,
+                               QLineEdit, QMessageBox, QPushButton, QWidget)
 
 from ..widgets.data_table import DataTable
 from .base import BaseModuleWidget
@@ -75,25 +75,68 @@ class SuppliersModule(BaseModuleWidget):
         self.layout().addWidget(self.table)
 
     def refresh(self) -> None:
-        try:
-            response = asyncio.run(self.api_client.get("/api/suppliers"))
-            response.raise_for_status()
-            data = response.json()
-        except Exception as exc:
-            QMessageBox.warning(self, "Suppliers", str(exc))
+        if os.environ.get("TRADEDESK_USE_QTASYNCIO"):
+
+            async def _async_fetch():
+                resp = await self.api_client.get("/api/suppliers")
+                resp.raise_for_status()
+                return resp.json()
+
+            def _on_result(data):
+                try:
+                    rows = [
+                        [
+                            str(item["id"]),
+                            item["supplier_code"],
+                            item["supplier_name"],
+                            item["country"] or "",
+                            str(item.get("current_balance")),
+                        ]
+                        for item in data
+                    ]
+                    self.table.set_rows(
+                        ["ID", "Code", "Name", "Country", "Balance"],
+                        rows,
+                        stretch_columns={2},
+                    )
+                except Exception as exc:
+                    QMessageBox.warning(self, "Suppliers", str(exc))
+
+            def _on_error(exc):
+                QMessageBox.warning(self, "Suppliers", str(exc))
+
+            self.run_async(_async_fetch(), on_result=_on_result, on_error=_on_error)
             return
 
-        rows = [
-            [
-                str(item["id"]),
-                item["supplier_code"],
-                item["supplier_name"],
-                item["country"] or "",
-                str(item["current_balance"]),
-            ]
-            for item in data
-        ]
-        self.table.set_rows(["ID", "Code", "Name", "Country", "Balance"], rows, stretch_columns={2})
+        def _do_fetch():
+            resp = self.api_client.sync_get("/api/suppliers")
+            resp.raise_for_status()
+            return resp.json()
+
+        def _on_result(data):
+            try:
+                rows = [
+                    [
+                        str(item["id"]),
+                        item["supplier_code"],
+                        item["supplier_name"],
+                        item["country"] or "",
+                        str(item.get("current_balance")),
+                    ]
+                    for item in data
+                ]
+                self.table.set_rows(
+                    ["ID", "Code", "Name", "Country", "Balance"],
+                    rows,
+                    stretch_columns={2},
+                )
+            except Exception as exc:
+                QMessageBox.warning(self, "Suppliers", str(exc))
+
+        def _on_error(exc):
+            QMessageBox.warning(self, "Suppliers", str(exc))
+
+        self.run_blocking(_do_fetch, on_result=_on_result, on_error=_on_error)
 
     def create_supplier(self) -> None:
         # Clear previous inline errors
@@ -121,7 +164,10 @@ class SuppliersModule(BaseModuleWidget):
             has_error = True
         if has_error:
             from pathlib import Path
-            icon = Path(__file__).resolve().parents[1] / 'assets' / 'icons' / 'error.svg'
+
+            icon = (
+                Path(__file__).resolve().parents[1] / "assets" / "icons" / "error.svg"
+            )
             for lbl in (self.code_error, self.name_error, self.opening_error):
                 txt = lbl.text().strip()
                 if txt:
@@ -134,51 +180,67 @@ class SuppliersModule(BaseModuleWidget):
             "country": self.country_input.text().strip() or None,
             "opening_balance": opening,
         }
-        try:
-            response = asyncio.run(self.api_client.post("/api/suppliers", json=payload))
-        except Exception as exc:
-            QMessageBox.warning(self, "Create Supplier", str(exc))
-            return
 
-        if response.status_code != 201:
+        def _do_create():
+            return self.api_client.sync_post("/api/suppliers", json=payload)
+
+        def _on_result(response):
             try:
-                data = response.json()
-                if isinstance(data, dict) and "detail" in data:
-                    detail = data["detail"]
-                    if isinstance(detail, list):
-                        for d in detail:
-                            loc = d.get("loc") or []
-                            if isinstance(loc, (list, tuple)) and len(loc) > 0:
-                                field = str(loc[-1])
+                if response.status_code != 201:
+                    try:
+                        data = response.json()
+                        if isinstance(data, dict) and "detail" in data:
+                            detail = data["detail"]
+                            if isinstance(detail, list):
+                                for d in detail:
+                                    loc = d.get("loc") or []
+                                    if isinstance(loc, (list, tuple)) and len(loc) > 0:
+                                        field = str(loc[-1])
+                                    else:
+                                        field = None
+                                    msg = d.get("msg", "Invalid")
+                                    if field == "supplier_code":
+                                        self.code_error.setText(msg)
+                                    elif field == "supplier_name":
+                                        self.name_error.setText(msg)
+                                    elif field == "opening_balance":
+                                        self.opening_error.setText(msg)
+                                return
                             else:
-                                field = None
-                            msg = d.get("msg", "Invalid")
-                            if field == "supplier_code":
-                                self.code_error.setText(msg)
-                            elif field == "supplier_name":
-                                self.name_error.setText(msg)
-                            elif field == "opening_balance":
-                                self.opening_error.setText(msg)
-                        return
-                    else:
-                        QMessageBox.warning(self, "Create Supplier", str(detail))
-                else:
-                    QMessageBox.warning(self, "Create Supplier", str(data))
-            except Exception:
-                QMessageBox.warning(self, "Create Supplier", f"Error: {response.status_code} {response.text}")
-            return
-        self.code_input.clear()
-        self.name_input.clear()
-        self.country_input.clear()
-        self.opening_input.setText("0")
-        self.refresh()
+                                QMessageBox.warning(
+                                    self, "Create Supplier", str(detail)
+                                )
+                        else:
+                            QMessageBox.warning(self, "Create Supplier", str(data))
+                    except Exception:
+                        QMessageBox.warning(
+                            self,
+                            "Create Supplier",
+                            f"Error: {response.status_code} {response.text}",
+                        )
+                    return
+
+                self.code_input.clear()
+                self.name_input.clear()
+                self.country_input.clear()
+                self.opening_input.setText("0")
+                self.refresh()
+            except Exception as exc:
+                QMessageBox.warning(self, "Create Supplier", str(exc))
+
+        def _on_error(exc):
+            QMessageBox.warning(self, "Create Supplier", str(exc))
+
+        self.run_blocking(_do_create, on_result=_on_result, on_error=_on_error)
 
     def delete_selected(self) -> None:
         # Support bulk delete for multiple selected rows
         indexes = self.table.table.selectedIndexes()
         rows = sorted({idx.row() for idx in indexes})
         if not rows:
-            QMessageBox.information(self, "Delete Supplier", "Select one or more supplier rows to delete")
+            QMessageBox.information(
+                self, "Delete Supplier", "Select one or more supplier rows to delete"
+            )
             return
 
         ids = []
@@ -188,49 +250,110 @@ class SuppliersModule(BaseModuleWidget):
                 ids.append(item.text())
 
         if not ids:
-            QMessageBox.information(self, "Delete Supplier", "Could not determine selected supplier ids")
+            QMessageBox.information(
+                self, "Delete Supplier", "Could not determine selected supplier ids"
+            )
             return
 
-        if QMessageBox.question(self, "Delete Supplier", f"Delete {len(ids)} suppliers? This cannot be undone.") != QMessageBox.StandardButton.Yes:
+        if (
+            QMessageBox.question(
+                self,
+                "Delete Supplier",
+                f"Delete {len(ids)} suppliers? This cannot be undone.",
+            )
+            != QMessageBox.StandardButton.Yes
+        ):
             return
 
-        errors = []
-        for sid in ids:
+        # placeholder for potential per-item errors; currently unused
+
+        def _do_delete():
+            if len(ids) > 1:
+                return self.api_client.sync_post("/api/suppliers/bulk-delete", json=ids)
+            else:
+                return self.api_client.sync_delete(f"/api/suppliers/{ids[0]}")
+
+        def _on_result(response):
             try:
-                if len(ids) > 1:
-                    resp = asyncio.run(self.api_client.post("/api/suppliers/bulk-delete", json=ids))
-                    if resp.status_code == 200:
-                        failed = resp.json().get("failed", [])
+                if hasattr(response, "status_code") and response.status_code in (
+                    200,
+                    204,
+                ):
+                    self.refresh()
+                    return
+                if hasattr(response, "json"):
+                    data = response.json()
+                    if isinstance(data, dict) and "failed" in data:
+                        failed = data.get("failed", [])
                         if failed:
-                            errors.extend([f"{f}: failed" for f in failed])
-                    else:
-                        errors.append(f"bulk-delete failed: {resp.status_code} {resp.text}")
-                    break
-                else:
-                    response = asyncio.run(self.api_client.delete(f"/api/suppliers/{sid}"))
-                    if response.status_code not in (200, 204):
-                        errors.append(f"{sid}: {response.status_code} {response.text}")
+                            QMessageBox.warning(
+                                self,
+                                "Delete Supplier",
+                                "Some deletes failed:\n"
+                                + "\n".join([str(f) for f in failed]),
+                            )
+                            return
+                QMessageBox.warning(
+                    self,
+                    "Delete Supplier",
+                    f"Delete failed: {getattr(response, 'status_code', '')} {getattr(response, 'text', '')}",
+                )
             except Exception as exc:
-                errors.append(str(exc))
+                QMessageBox.warning(self, "Delete Supplier", str(exc))
 
-        if errors:
-            QMessageBox.warning(self, "Delete Supplier", "Some deletes failed:\n" + "\n".join(errors))
+        def _on_error(exc):
+            QMessageBox.warning(self, "Delete Supplier", str(exc))
 
-        self.refresh()
+        self.run_blocking(_do_delete, on_result=_on_result, on_error=_on_error)
 
     def load_ledger(self) -> None:
         supplier_id = self.ledger_id_input.text().strip()
         if not supplier_id.isdigit():
-            QMessageBox.warning(self, "Supplier Ledger", "Enter a valid numeric supplier ID")
+            QMessageBox.warning(
+                self, "Supplier Ledger", "Enter a valid numeric supplier ID"
+            )
             return
-        try:
-            response = asyncio.run(self.api_client.get(f"/api/suppliers/{supplier_id}/ledger"))
-            response.raise_for_status()
-            data = response.json()
-        except Exception as exc:
-            QMessageBox.warning(self, "Supplier Ledger", str(exc))
+        if os.environ.get("TRADEDESK_USE_QTASYNCIO"):
+
+            async def _async_load():
+                resp = await self.api_client.get(f"/api/suppliers/{supplier_id}/ledger")
+                resp.raise_for_status()
+                return resp.json()
+
+            def _on_result(data):
+                try:
+                    self.ledger_summary.setText(
+                        (
+                            f"Ledger debit: {data['total_debit']} | credit: {data['total_credit']} | "
+                            f"balance: {data['current_balance']}"
+                        )
+                    )
+                except Exception as exc:
+                    QMessageBox.warning(self, "Supplier Ledger", str(exc))
+
+            def _on_error(exc):
+                QMessageBox.warning(self, "Supplier Ledger", str(exc))
+
+            self.run_async(_async_load(), on_result=_on_result, on_error=_on_error)
             return
 
-        self.ledger_summary.setText(
-            f"Ledger debit: {data['total_debit']} | credit: {data['total_credit']} | balance: {data['current_balance']}"
-        )
+        def _do_load():
+            resp = self.api_client.sync_get(f"/api/suppliers/{supplier_id}/ledger")
+            resp.raise_for_status()
+            return resp.json()
+
+        def _on_result(data):
+            try:
+                self.ledger_summary.setText(
+                    (
+                        f"Ledger debit: {data['total_debit']} | credit: {data['total_credit']} | "
+                        f"balance: {data['current_balance']}"
+                    )
+                )
+            except Exception as exc:
+                QMessageBox.warning(self, "Supplier Ledger", str(exc))
+
+        def _on_error(exc):
+            QMessageBox.warning(self, "Supplier Ledger", str(exc))
+
+        self.run_blocking(_do_load, on_result=_on_result, on_error=_on_error)

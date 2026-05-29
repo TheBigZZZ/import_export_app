@@ -1,8 +1,9 @@
 from __future__ import annotations
 
-import asyncio
+import os
 
-from PySide6.QtWidgets import QComboBox, QFormLayout, QGroupBox, QHBoxLayout, QLabel, QLineEdit, QMessageBox, QPushButton, QVBoxLayout
+from PySide6.QtWidgets import (QComboBox, QFormLayout, QGroupBox, QHBoxLayout,
+                               QLabel, QLineEdit, QMessageBox, QPushButton)
 
 from ..widgets.data_table import DataTable
 from .base import BaseModuleWidget
@@ -54,53 +55,132 @@ class ChartOfAccountsModule(BaseModuleWidget):
         self.load_accounts()
 
     def load_accounts(self) -> None:
-        try:
-            response = asyncio.run(self.api_client.get("/api/accounts"))
-            response.raise_for_status()
-            data = response.json()
-        except Exception as exc:
-            QMessageBox.warning(self, "Accounts", str(exc))
+        if os.environ.get("TRADEDESK_USE_QTASYNCIO"):
+
+            async def _async_fetch():
+                resp = await self.api_client.get("/api/accounts")
+                resp.raise_for_status()
+                return resp.json()
+
+            def _on_result(data):
+                try:
+                    rows = [
+                        [
+                            str(item["id"]),
+                            item["account_code"],
+                            item["account_name"],
+                            item["account_type"],
+                            str(item.get("parent_id") or ""),
+                            "Yes" if item.get("is_system") else "No",
+                        ]
+                        for item in data
+                    ]
+                    self.table.set_rows(
+                        ["ID", "Code", "Name", "Type", "Parent", "System"],
+                        rows,
+                        stretch_columns={2},
+                    )
+                except Exception as exc:
+                    QMessageBox.warning(self, "Accounts", str(exc))
+
+            def _on_error(exc):
+                QMessageBox.warning(self, "Accounts", str(exc))
+
+            self.run_async(_async_fetch(), on_result=_on_result, on_error=_on_error)
             return
 
-        rows = [
-            [
-                str(item["id"]),
-                item["account_code"],
-                item["account_name"],
-                item["account_type"],
-                str(item["parent_id"] or ""),
-                "Yes" if item["is_system"] else "No",
-            ]
-            for item in data
-        ]
-        self.table.set_rows(["ID", "Code", "Name", "Type", "Parent", "System"], rows, stretch_columns={2})
+        def _do_fetch():
+            resp = self.api_client.sync_get("/api/accounts")
+            resp.raise_for_status()
+            return resp.json()
+
+        def _on_result(data):
+            try:
+                rows = [
+                    [
+                        str(item["id"]),
+                        item["account_code"],
+                        item["account_name"],
+                        item["account_type"],
+                        str(item.get("parent_id") or ""),
+                        "Yes" if item.get("is_system") else "No",
+                    ]
+                    for item in data
+                ]
+                self.table.set_rows(
+                    ["ID", "Code", "Name", "Type", "Parent", "System"],
+                    rows,
+                    stretch_columns={2},
+                )
+            except Exception as exc:
+                QMessageBox.warning(self, "Accounts", str(exc))
+
+        def _on_error(exc):
+            QMessageBox.warning(self, "Accounts", str(exc))
+
+        self.run_blocking(_do_fetch, on_result=_on_result, on_error=_on_error)
 
     def load_tree(self) -> None:
-        try:
-            response = asyncio.run(self.api_client.get("/api/accounts/tree"))
-            response.raise_for_status()
-            data = response.json()
-        except Exception as exc:
-            QMessageBox.warning(self, "Accounts Tree", str(exc))
+        if os.environ.get("TRADEDESK_USE_QTASYNCIO"):
+
+            async def _async_fetch():
+                resp = await self.api_client.get("/api/accounts/tree")
+                resp.raise_for_status()
+                return resp.json()
+
+            def _on_result(data):
+                try:
+                    self.tree_label.setText(f"Tree roots: {len(data)}")
+                except Exception as exc:
+                    QMessageBox.warning(self, "Accounts Tree", str(exc))
+
+            def _on_error(exc):
+                QMessageBox.warning(self, "Accounts Tree", str(exc))
+
+            self.run_async(_async_fetch(), on_result=_on_result, on_error=_on_error)
             return
-        self.tree_label.setText(f"Tree roots: {len(data)}")
+
+        def _do_fetch():
+            resp = self.api_client.sync_get("/api/accounts/tree")
+            resp.raise_for_status()
+            return resp.json()
+
+        def _on_result(data):
+            try:
+                self.tree_label.setText(f"Tree roots: {len(data)}")
+            except Exception as exc:
+                QMessageBox.warning(self, "Accounts Tree", str(exc))
+
+        def _on_error(exc):
+            QMessageBox.warning(self, "Accounts Tree", str(exc))
+
+        self.run_blocking(_do_fetch, on_result=_on_result, on_error=_on_error)
 
     def create_account(self) -> None:
         payload = {
             "account_code": self.code_input.text().strip(),
             "account_name": self.name_input.text().strip(),
             "account_type": self.type_input.currentText(),
-            "parent_id": int(self.parent_input.text()) if self.parent_input.text().strip() else None,
+            "parent_id": (
+                int(self.parent_input.text())
+                if self.parent_input.text().strip()
+                else None
+            ),
             "is_system": False,
         }
-        try:
-            response = asyncio.run(self.api_client.post("/api/accounts", json=payload))
-            response.raise_for_status()
-        except Exception as exc:
-            QMessageBox.warning(self, "Create Account", str(exc))
-            return
 
-        self.code_input.clear()
-        self.name_input.clear()
-        self.parent_input.clear()
-        self.refresh()
+        def _do_create():
+            resp = self.api_client.sync_post("/api/accounts", json=payload)
+            resp.raise_for_status()
+            return resp
+
+        def _on_result(_):
+            self.code_input.clear()
+            self.name_input.clear()
+            self.parent_input.clear()
+            self.refresh()
+
+        def _on_error(exc):
+            QMessageBox.warning(self, "Create Account", str(exc))
+
+        self.run_blocking(_do_create, on_result=_on_result, on_error=_on_error)

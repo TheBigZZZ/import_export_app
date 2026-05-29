@@ -6,7 +6,7 @@ from decimal import Decimal
 from sqlalchemy import and_, func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from ..models.transaction import Transaction, VoucherType
+from ..models.transaction import Transaction
 from ..schemas.cash import DailyClosingResponse
 from ..schemas.voucher import VoucherCreate, VoucherLineIn
 from .voucher_service import VoucherService
@@ -40,13 +40,33 @@ class CashService:
         voucher_type = "CRV" if direction == "in" else "CPV"
         lines = (
             [
-                VoucherLineIn(account_id=self.CASH_ACCOUNT_ID, debit=amount, credit=Decimal("0.00"), description=description),
-                VoucherLineIn(account_id=account_id, debit=Decimal("0.00"), credit=amount, description=description),
+                VoucherLineIn(
+                    account_id=self.CASH_ACCOUNT_ID,
+                    debit=amount,
+                    credit=Decimal("0.00"),
+                    description=description,
+                ),
+                VoucherLineIn(
+                    account_id=account_id,
+                    debit=Decimal("0.00"),
+                    credit=amount,
+                    description=description,
+                ),
             ]
             if direction == "in"
             else [
-                VoucherLineIn(account_id=account_id, debit=amount, credit=Decimal("0.00"), description=description),
-                VoucherLineIn(account_id=self.CASH_ACCOUNT_ID, debit=Decimal("0.00"), credit=amount, description=description),
+                VoucherLineIn(
+                    account_id=account_id,
+                    debit=amount,
+                    credit=Decimal("0.00"),
+                    description=description,
+                ),
+                VoucherLineIn(
+                    account_id=self.CASH_ACCOUNT_ID,
+                    debit=Decimal("0.00"),
+                    credit=amount,
+                    description=description,
+                ),
             ]
         )
 
@@ -66,7 +86,12 @@ class CashService:
             select(
                 func.coalesce(func.sum(Transaction.debit), 0),
                 func.coalesce(func.sum(Transaction.credit), 0),
-            ).where(and_(Transaction.account_id == self.CASH_ACCOUNT_ID, Transaction.transaction_date < for_date))
+            ).where(
+                and_(
+                    Transaction.account_id == self.CASH_ACCOUNT_ID,
+                    Transaction.transaction_date < for_date,
+                )
+            )
         )
         opening_debit, opening_credit = opening_res.one()
         opening = Decimal(opening_debit) - Decimal(opening_credit)
@@ -75,7 +100,12 @@ class CashService:
             select(
                 func.coalesce(func.sum(Transaction.debit), 0),
                 func.coalesce(func.sum(Transaction.credit), 0),
-            ).where(and_(Transaction.account_id == self.CASH_ACCOUNT_ID, Transaction.transaction_date == for_date))
+            ).where(
+                and_(
+                    Transaction.account_id == self.CASH_ACCOUNT_ID,
+                    Transaction.transaction_date == for_date,
+                )
+            )
         )
         receipts, payments = day_res.one()
 

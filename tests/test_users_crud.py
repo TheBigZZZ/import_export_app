@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import pytest
 
-from tests.test_integration_api import integration_client, _auth_headers
+from tests.test_integration_api import _auth_headers
 
 
 @pytest.mark.asyncio
@@ -28,7 +28,9 @@ async def test_users_crud_and_roles(integration_client) -> None:
     assert fetch.json()["username"] == "worker1"
 
     # Update user role (admin can update)
-    upd = await integration_client.put(f"/api/users/{user_id}", headers=headers, json={"role": "manager"})
+    upd = await integration_client.put(
+        f"/api/users/{user_id}", headers=headers, json={"role": "manager"}
+    )
     assert upd.status_code == 200
     assert upd.json()["role"] == "manager"
 

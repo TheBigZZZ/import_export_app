@@ -1,5 +1,9 @@
 from collections.abc import AsyncGenerator
-from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker, create_async_engine
+
+import aiosqlite  # noqa: F401 - ensure PyInstaller includes the async SQLite driver
+
+from sqlalchemy.ext.asyncio import (AsyncSession, async_sessionmaker,
+                                    create_async_engine)
 from sqlalchemy.orm import DeclarativeBase
 
 from .config import ensure_runtime_dirs, settings

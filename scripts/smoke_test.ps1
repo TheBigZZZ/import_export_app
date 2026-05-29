@@ -54,6 +54,22 @@ function Wait-ForHealth {
     return $false
 }
 
+function Wait-ForStartupSentinel {
+    param($TimeoutSec = 60, $AfterUtc = $null)
+    $tmp = $env:TEMP
+    $pattern = 'tradedesk-startup-*.ready'
+    $start = Get-Date
+    while ((Get-Date) -lt $start.AddSeconds($TimeoutSec)) {
+        $found = Get-ChildItem -Path $tmp -Filter $pattern -ErrorAction SilentlyContinue |
+            Sort-Object CreationTimeUtc -Descending |
+            Where-Object { -not $AfterUtc -or $_.CreationTimeUtc -ge $AfterUtc } |
+            Select-Object -First 1
+        if ($found) { return $found.FullName }
+        Start-Sleep -Milliseconds 200
+    }
+    return $null
+}
+
 function ExitWithFailure($msg) {
     Write-Host "[FAIL] $msg" -ForegroundColor Red
     Exit 1
@@ -103,10 +119,19 @@ if (-Not (Test-Path $pythonExe)) {
 }
 
 Write-Host "Launching EXE: $exePath"
+# Ensure the packaged app runs in headless smoke mode so it starts a local backend without UI prompts.
+$env:TRADEDESK_HEADLESS_SMOKE = '1'
+$launchTimeUtc = [DateTime]::UtcNow
+Get-ChildItem -Path $env:TEMP -Filter 'tradedesk-startup-*.ready' -ErrorAction SilentlyContinue | Remove-Item -Force -ErrorAction SilentlyContinue
 $proc = Start-Process -FilePath $exePath -PassThru
+# unset local env after starting child to avoid affecting caller
+Remove-Item Env:\TRADEDESK_HEADLESS_SMOKE -ErrorAction SilentlyContinue
 Start-Sleep -Milliseconds 800
 
 Write-Host "Waiting for health endpoint $HealthUrl ($Timeout s) ..."
+# Wait for explicit startup sentinel file first (written by backend on startup)
+$sentinel = Wait-ForStartupSentinel -TimeoutSec 60 -AfterUtc $launchTimeUtc
+if ($sentinel) { Write-Host "Found backend startup sentinel: $sentinel" }
 if (-Not (Wait-ForHealth -Url $HealthUrl -TimeoutSec $Timeout -Proc $proc -ErrorFile $err)) {
     # try to show backend temp error if present
     Show-BackendLogs -ErrorFile $err -LogFile $backendLog

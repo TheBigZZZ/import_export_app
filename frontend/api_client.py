@@ -38,19 +38,25 @@ class ApiClient:
     def auth_headers(self) -> dict[str, str]:
         return self._auth_headers()
 
-    async def post(self, path: str, json: dict[str, Any] | None = None, auth: bool = True) -> httpx.Response:
+    async def post(
+        self, path: str, json: dict[str, Any] | None = None, auth: bool = True
+    ) -> httpx.Response:
         headers = self._auth_headers() if auth else {}
         async with httpx.AsyncClient(base_url=self.base_url, timeout=30.0) as client:
             response = await client.post(path, json=json, headers=headers)
             return response
 
-    async def get(self, path: str, params: dict[str, Any] | None = None, auth: bool = True) -> httpx.Response:
+    async def get(
+        self, path: str, params: dict[str, Any] | None = None, auth: bool = True
+    ) -> httpx.Response:
         headers = self._auth_headers() if auth else {}
         async with httpx.AsyncClient(base_url=self.base_url, timeout=30.0) as client:
             response = await client.get(path, params=params, headers=headers)
             return response
 
-    async def put(self, path: str, json: dict[str, Any] | None = None, auth: bool = True) -> httpx.Response:
+    async def put(
+        self, path: str, json: dict[str, Any] | None = None, auth: bool = True
+    ) -> httpx.Response:
         headers = self._auth_headers() if auth else {}
         async with httpx.AsyncClient(base_url=self.base_url, timeout=30.0) as client:
             response = await client.put(path, json=json, headers=headers)
@@ -61,3 +67,30 @@ class ApiClient:
         async with httpx.AsyncClient(base_url=self.base_url, timeout=30.0) as client:
             response = await client.delete(path, headers=headers)
             return response
+
+    # Synchronous convenience wrappers for UI worker threads.
+    def sync_post(
+        self, path: str, json: dict[str, Any] | None = None, auth: bool = True
+    ) -> httpx.Response:
+        headers = self._auth_headers() if auth else {}
+        with httpx.Client(base_url=self.base_url, timeout=30.0) as client:
+            return client.post(path, json=json, headers=headers)
+
+    def sync_get(
+        self, path: str, params: dict[str, Any] | None = None, auth: bool = True
+    ) -> httpx.Response:
+        headers = self._auth_headers() if auth else {}
+        with httpx.Client(base_url=self.base_url, timeout=30.0) as client:
+            return client.get(path, params=params, headers=headers)
+
+    def sync_put(
+        self, path: str, json: dict[str, Any] | None = None, auth: bool = True
+    ) -> httpx.Response:
+        headers = self._auth_headers() if auth else {}
+        with httpx.Client(base_url=self.base_url, timeout=30.0) as client:
+            return client.put(path, json=json, headers=headers)
+
+    def sync_delete(self, path: str, auth: bool = True) -> httpx.Response:
+        headers = self._auth_headers() if auth else {}
+        with httpx.Client(base_url=self.base_url, timeout=30.0) as client:
+            return client.delete(path, headers=headers)

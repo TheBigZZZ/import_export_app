@@ -1,7 +1,6 @@
 from __future__ import annotations
 
 import getpass
-import sys
 
 from tradedesk.backend.utils.secret_store import set_secret
 
@@ -35,7 +34,10 @@ def main() -> int:
     if smtp_pass:
         set_secret("diagnostics_smtp_password", smtp_pass)
 
-    sms_provider = input("SMS Provider (leave blank for none, 'twilio' to enable): ").strip() or None
+    sms_provider = (
+        input("SMS Provider (leave blank for none, 'twilio' to enable): ").strip()
+        or None
+    )
     if sms_provider:
         set_secret("sms_provider", sms_provider)
         if sms_provider.lower() == "twilio":
@@ -49,7 +51,9 @@ def main() -> int:
             if from_number:
                 set_secret("sms_from_number", from_number)
 
-    print("Post-install wizard complete. Secrets stored in OS keyring or encrypted file.")
+    print(
+        "Post-install wizard complete. Secrets stored in OS keyring or encrypted file."
+    )
     return 0
 
 

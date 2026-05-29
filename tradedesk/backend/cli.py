@@ -29,8 +29,11 @@ def init_db() -> int:
     try:
         from alembic import command
         from alembic.config import Config
-    except Exception as exc:  # pragma: no cover - runtime helper
-        print("alembic is required to initialize the database; please install alembic", file=sys.stderr)
+    except Exception:  # pragma: no cover - runtime helper
+        print(
+            "alembic is required to initialize the database; please install alembic",
+            file=sys.stderr,
+        )
         return 2
 
     ini_path = _alembic_ini_path()
@@ -83,11 +86,20 @@ def restore_db_cmd(source: str) -> int:
 
 
 def reset_db_cmd(force: bool = False) -> int:
-    from .config import settings
     import os
-    allow_env = str(os.environ.get("TRADEDESK_ALLOW_RESET", "0")).lower() in ("1", "true", "yes")
+
+    from .config import settings
+
+    allow_env = str(os.environ.get("TRADEDESK_ALLOW_RESET", "0")).lower() in (
+        "1",
+        "true",
+        "yes",
+    )
     if not force and not allow_env:
-        print("Refusing to reset DB: pass --force or set TRADEDESK_ALLOW_RESET=1 to confirm", file=sys.stderr)
+        print(
+            "Refusing to reset DB: pass --force or set TRADEDESK_ALLOW_RESET=1 to confirm",
+            file=sys.stderr,
+        )
         return 2
 
     db_path = settings.db_path
@@ -113,24 +125,60 @@ def reset_db_cmd(force: bool = False) -> int:
 
 def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(prog="tradedesk.backend.cli")
-    parser.add_argument("--serve", action="store_true", help="Run the backend API server")
-    parser.add_argument("--init-db", action="store_true", help="Apply Alembic migrations (upgrade head)")
-    parser.add_argument("--backup-db", nargs="?", const="", help="Create a DB backup. Optionally pass a destination directory.")
+    parser.add_argument(
+        "--serve", action="store_true", help="Run the backend API server"
+    )
+    parser.add_argument(
+        "--init-db", action="store_true", help="Apply Alembic migrations (upgrade head)"
+    )
+    parser.add_argument(
+        "--backup-db",
+        nargs="?",
+        const="",
+        help="Create a DB backup. Optionally pass a destination directory.",
+    )
     parser.add_argument("--restore-db", help="Restore DB from a backup file")
-    parser.add_argument("--reset-db", action="store_true", help="Reset the database file (destructive). Requires --force or TRADEDESK_ALLOW_RESET=1")
+    parser.add_argument(
+        "--reset-db",
+        action="store_true",
+        help="Reset the database file (destructive). Requires --force or TRADEDESK_ALLOW_RESET=1",
+    )
 
     # Initial admin creation (non-interactive) - intended for first-run/installer
-    parser.add_argument("--init-admin", action="store_true", help="Create initial admin user non-interactively (requires --admin-username and --admin-password)")
+    parser.add_argument(
+        "--init-admin",
+        action="store_true",
+        help="Create initial admin user non-interactively (requires --admin-username and --admin-password)",
+    )
     parser.add_argument("--admin-username", help="Username for initial admin")
     parser.add_argument("--admin-password", help="Password for initial admin")
-    parser.add_argument("--admin-full-name", help="Full name for initial admin", default="System Administrator")
+    parser.add_argument(
+        "--admin-full-name",
+        help="Full name for initial admin",
+        default="System Administrator",
+    )
     parser.add_argument("--admin-email", help="Email for initial admin", default=None)
-    parser.add_argument("--admin-role", help="Role for initial admin", default="super_admin")
-    parser.add_argument("--force", action="store_true", help="Force operation even if users already exist")
-    parser.add_argument("--set-secret", nargs=2, metavar=("KEY", "VALUE"), help="Set a secret in the OS keyring (example: --set-secret jwt_secret_key hunter2)")
+    parser.add_argument(
+        "--admin-role", help="Role for initial admin", default="super_admin"
+    )
+    parser.add_argument(
+        "--force",
+        action="store_true",
+        help="Force operation even if users already exist",
+    )
+    parser.add_argument(
+        "--set-secret",
+        nargs=2,
+        metavar=("KEY", "VALUE"),
+        help="Set a secret in the OS keyring (example: --set-secret jwt_secret_key hunter2)",
+    )
 
     # Reset admin password safely
-    parser.add_argument("--reset-admin-password", action="store_true", help="Reset password for an existing user (requires --target-username and --admin-password)")
+    parser.add_argument(
+        "--reset-admin-password",
+        action="store_true",
+        help="Reset password for an existing user (requires --target-username and --admin-password)",
+    )
     parser.add_argument("--target-username", help="Username to reset password for")
 
     args = parser.parse_args(argv)
@@ -161,7 +209,10 @@ def main(argv: list[str] | None = None) -> int:
 
     if args.init_admin:
         if not args.admin_username or not args.admin_password:
-            print("--admin-username and --admin-password are required when using --init-admin", file=sys.stderr)
+            print(
+                "--admin-username and --admin-password are required when using --init-admin",
+                file=sys.stderr,
+            )
             return 2
         return init_admin_cmd(
             username=args.admin_username,
@@ -174,9 +225,14 @@ def main(argv: list[str] | None = None) -> int:
 
     if args.reset_admin_password:
         if not args.target_username or not args.admin_password:
-            print("--target-username and --admin-password are required when using --reset-admin-password", file=sys.stderr)
+            print(
+                "--target-username and --admin-password are required when using --reset-admin-password",
+                file=sys.stderr,
+            )
             return 2
-        return reset_admin_password_cmd(username=args.target_username, new_password=args.admin_password)
+        return reset_admin_password_cmd(
+            username=args.target_username, new_password=args.admin_password
+        )
 
     parser.print_help()
     return 0
@@ -189,28 +245,44 @@ def _connect_db():
     return conn
 
 
-def init_admin_cmd(username: str, password: str, full_name: str, email: str | None, role: str = "super_admin", force: bool = False) -> int:
+def init_admin_cmd(
+    username: str,
+    password: str,
+    full_name: str,
+    email: str | None,
+    role: str = "super_admin",
+    force: bool = False,
+) -> int:
     conn = _connect_db()
     cur = conn.cursor()
 
     # Ensure users table exists
     cur.execute("SELECT name FROM sqlite_master WHERE type='table' AND name='users'")
     if not cur.fetchone():
-        print("Users table not found. Run migrations first (python -m tradedesk.backend.cli --init-db)", file=sys.stderr)
+        print(
+            "Users table not found. Run migrations first (python -m tradedesk.backend.cli --init-db)",
+            file=sys.stderr,
+        )
         return 1
 
     # Check existing users
     cur.execute("SELECT COUNT(1) FROM users")
     count = cur.fetchone()[0]
     if count > 0 and not force:
-        print("Users already exist. Refusing to create initial admin unless --force is provided.", file=sys.stderr)
+        print(
+            "Users already exist. Refusing to create initial admin unless --force is provided.",
+            file=sys.stderr,
+        )
         return 1
 
     # Insert new user
     pwd_hash = hash_password(password)
     try:
         cur.execute(
-            "INSERT INTO users (full_name, username, email, password_hash, role, is_active, failed_login_attempts, locked_until) VALUES (?, ?, ?, ?, ?, ?, ?, ?)",
+            (
+                "INSERT INTO users (full_name, username, email, password_hash, role, "
+                "is_active, failed_login_attempts, locked_until) VALUES (?, ?, ?, ?, ?, ?, ?, ?)"
+            ),
             (full_name, username, email, pwd_hash, role, 1, 0, None),
         )
         conn.commit()
@@ -235,7 +307,10 @@ def reset_admin_password_cmd(username: str, new_password: str) -> int:
         return 1
     pwd_hash = hash_password(new_password)
     try:
-        cur.execute("UPDATE users SET password_hash = ? WHERE username = ?", (pwd_hash, username))
+        cur.execute(
+            "UPDATE users SET password_hash = ? WHERE username = ?",
+            (pwd_hash, username),
+        )
         conn.commit()
     except Exception as exc:
         print("Failed to reset password:", exc, file=sys.stderr)
@@ -256,6 +331,7 @@ def serve_cmd() -> int:
 
     try:
         import uvicorn
+
         from .main import app
     except Exception as exc:
         try:

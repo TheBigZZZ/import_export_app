@@ -1,8 +1,9 @@
 from __future__ import annotations
 
+import contextvars
 import logging
 import logging.handlers
-import contextvars
+from pathlib import Path
 from typing import Optional
 
 try:
@@ -10,7 +11,9 @@ try:
 except Exception:  # pragma: no cover - optional
     jsonlogger = None
 
-CORRELATION_ID: contextvars.ContextVar[Optional[str]] = contextvars.ContextVar("correlation_id", default=None)
+CORRELATION_ID: contextvars.ContextVar[Optional[str]] = contextvars.ContextVar(
+    "correlation_id", default=None
+)
 
 
 class CorrelationFilter(logging.Filter):
@@ -22,8 +25,12 @@ class CorrelationFilter(logging.Filter):
 
 def _build_formatter() -> logging.Formatter:
     if jsonlogger is not None:
-        return jsonlogger.JsonFormatter('%(asctime)s %(levelname)s %(name)s %(message)s %(correlation_id)s')
-    return logging.Formatter('%(asctime)s %(levelname)s %(name)s %(message)s [cid=%(correlation_id)s]')
+        return jsonlogger.JsonFormatter(
+            "%(asctime)s %(levelname)s %(name)s %(message)s %(correlation_id)s"
+        )
+    return logging.Formatter(
+        "%(asctime)s %(levelname)s %(name)s %(message)s [cid=%(correlation_id)s]"
+    )
 
 
 def setup_logging(log_dir: str | None = None, level: int = logging.INFO) -> None:
@@ -44,16 +51,22 @@ def setup_logging(log_dir: str | None = None, level: int = logging.INFO) -> None
 
     # File handler
     if log_dir:
-        app_log = f"{log_dir}/app.log"
-        fh = logging.handlers.RotatingFileHandler(app_log, maxBytes=5_242_880, backupCount=7, encoding="utf-8")
+        log_path = Path(log_dir)
+        app_log = log_path / "app.log"
+        fh = logging.handlers.RotatingFileHandler(
+            app_log, maxBytes=5_242_880, backupCount=7, encoding="utf-8"
+        )
         fh.setFormatter(fmt)
         fh.addFilter(corr_filter)
         root.addHandler(fh)
 
     # Audit file (separate handler for append-only audit logs)
     if log_dir:
-        audit_log = f"{log_dir}/audit.log"
-        ah = logging.handlers.RotatingFileHandler(audit_log, maxBytes=10_485_760, backupCount=30, encoding="utf-8")
+        log_path = Path(log_dir)
+        audit_log = log_path / "audit.log"
+        ah = logging.handlers.RotatingFileHandler(
+            audit_log, maxBytes=10_485_760, backupCount=30, encoding="utf-8"
+        )
         ah.setFormatter(fmt)
         ah.addFilter(corr_filter)
         ah.setLevel(logging.INFO)
@@ -66,3 +79,11 @@ def set_correlation_id(cid: Optional[str]) -> None:
         CORRELATION_ID.set(None)
     else:
         CORRELATION_ID.set(cid)
+
+
+def flush_logging_handlers() -> None:
+    for handler in logging.getLogger().handlers:
+        try:
+            handler.flush()
+        except Exception:
+            pass

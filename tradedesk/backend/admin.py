@@ -1,16 +1,18 @@
 from __future__ import annotations
 
-from fastapi import APIRouter, HTTPException, Header, Request, Response, Form
-from pathlib import Path
-import secrets
-from typing import List
-from .config import settings
-from fastapi.responses import HTMLResponse
-import hmac
 import hashlib
-import time
-import sqlite3
+import hmac
 import json
+import secrets
+import sqlite3
+import time
+from pathlib import Path
+from typing import List
+
+from fastapi import APIRouter, Form, Header, HTTPException, Request, Response
+from fastapi.responses import HTMLResponse
+
+from .config import settings
 
 router = APIRouter()
 
@@ -24,7 +26,10 @@ def _ensure_storage_dir() -> Path:
 
 @router.get("/installs")
 def list_installs(x_admin_key: str | None = Header(None)) -> List[dict]:
-    if not settings.diagnostics_admin_key or x_admin_key != settings.diagnostics_admin_key:
+    if (
+        not settings.diagnostics_admin_key
+        or x_admin_key != settings.diagnostics_admin_key
+    ):
         raise HTTPException(status_code=403)
     storage = _ensure_storage_dir()
     installs = []
@@ -36,7 +41,10 @@ def list_installs(x_admin_key: str | None = Header(None)) -> List[dict]:
 
 @router.post("/installs/{install_id}/revoke")
 def revoke_install(install_id: str, x_admin_key: str | None = Header(None)) -> dict:
-    if not settings.diagnostics_admin_key or x_admin_key != settings.diagnostics_admin_key:
+    if (
+        not settings.diagnostics_admin_key
+        or x_admin_key != settings.diagnostics_admin_key
+    ):
         raise HTTPException(status_code=403)
     storage = _ensure_storage_dir()
     secret_path = storage / "installs" / f"{install_id}.secret"
@@ -49,6 +57,7 @@ def revoke_install(install_id: str, x_admin_key: str | None = Header(None)) -> d
 def admin_ui(request: Request) -> str:
     # session cookie check (signed)
     cookie = request.cookies.get("diagnostics_admin")
+
     def _verify_cookie(token: str) -> bool:
         try:
             parts = token.split(".")
@@ -56,7 +65,9 @@ def admin_ui(request: Request) -> str:
                 return False
             payload_b64, expires_str, sig = parts
             msg = f"{payload_b64}.{expires_str}".encode("utf-8")
-            expected = hmac.new(settings.jwt_secret_key.encode("utf-8"), msg, hashlib.sha256).hexdigest()
+            expected = hmac.new(
+                settings.jwt_secret_key.encode("utf-8"), msg, hashlib.sha256
+            ).hexdigest()
             if not hmac.compare_digest(expected, sig):
                 return False
             if int(expires_str) < int(time.time()):
@@ -83,10 +94,12 @@ def admin_ui(request: Request) -> str:
             rotate_action = f"/diagnostics/admin/installs/{p.stem}/rotate"
             revoke_action = f"/diagnostics/admin/installs/{p.stem}/revoke"
             actions = (
-                f"<form method=\"post\" action=\"{rotate_action}\"> <button>Rotate</button></form>"
-                f"<form method=\"post\" action=\"{revoke_action}\"> <button>Revoke</button></form>"
+                f'<form method="post" action="{rotate_action}"> <button>Rotate</button></form>'
+                f'<form method="post" action="{revoke_action}"> <button>Revoke</button></form>'
             )
-            rows.append(f"<tr><td>{p.stem}</td><td>{p.name}</td><td>{actions}</td></tr>")
+            rows.append(
+                f"<tr><td>{p.stem}</td><td>{p.name}</td><td>{actions}</td></tr>"
+            )
     html = f"""
     <html><body>
     <h2>Diagnostics Installs</h2>
@@ -96,19 +109,31 @@ def admin_ui(request: Request) -> str:
     return HTMLResponse(html)
 
 
-
 @router.post("/login")
 def admin_login(response: Response, admin_key: str = Form(...)) -> Response:
-    if not settings.diagnostics_admin_key or admin_key != settings.diagnostics_admin_key:
+    if (
+        not settings.diagnostics_admin_key
+        or admin_key != settings.diagnostics_admin_key
+    ):
         raise HTTPException(status_code=403)
     # create signed cookie: payload (static), expiry, signature
     expires = int(time.time()) + settings.diagnostics_admin_session_ttl_seconds
     payload_b64 = "admin"
     msg = f"{payload_b64}.{expires}".encode("utf-8")
-    sig = hmac.new(settings.jwt_secret_key.encode("utf-8"), msg, hashlib.sha256).hexdigest()
+    sig = hmac.new(
+        settings.jwt_secret_key.encode("utf-8"), msg, hashlib.sha256
+    ).hexdigest()
     token = f"{payload_b64}.{expires}.{sig}"
-    response = HTMLResponse("<html><body>Logged in. <a href=\"/diagnostics/admin/ui\">Continue</a></body></html>")
-    response.set_cookie("diagnostics_admin", token, httponly=True, path="/diagnostics/admin", max_age=settings.diagnostics_admin_session_ttl_seconds)
+    response = HTMLResponse(
+        '<html><body>Logged in. <a href="/diagnostics/admin/ui">Continue</a></body></html>'
+    )
+    response.set_cookie(
+        "diagnostics_admin",
+        token,
+        httponly=True,
+        path="/diagnostics/admin",
+        max_age=settings.diagnostics_admin_session_ttl_seconds,
+    )
     return response
 
 
@@ -123,7 +148,9 @@ def rotate_install(install_id: str, request: Request) -> dict:
         raise HTTPException(status_code=403)
     payload_b64, expires_str, sig = parts
     msg = f"{payload_b64}.{expires_str}".encode("utf-8")
-    expected = hmac.new(settings.jwt_secret_key.encode("utf-8"), msg, hashlib.sha256).hexdigest()
+    expected = hmac.new(
+        settings.jwt_secret_key.encode("utf-8"), msg, hashlib.sha256
+    ).hexdigest()
     if not hmac.compare_digest(expected, sig) or int(expires_str) < int(time.time()):
         raise HTTPException(status_code=403)
     storage = _ensure_storage_dir()
@@ -134,11 +161,13 @@ def rotate_install(install_id: str, request: Request) -> dict:
     return {"install_id": install_id, "install_secret": new_secret}
 
 
-
 @router.get("/audit/export")
 def export_audit(x_admin_key: str | None = Header(None)) -> Response:
     """Export audit logs as a JSON array. Protected by diagnostics_admin_key."""
-    if not settings.diagnostics_admin_key or x_admin_key != settings.diagnostics_admin_key:
+    if (
+        not settings.diagnostics_admin_key
+        or x_admin_key != settings.diagnostics_admin_key
+    ):
         raise HTTPException(status_code=403)
 
     dbp = Path(settings.db_path)
@@ -148,7 +177,12 @@ def export_audit(x_admin_key: str | None = Header(None)) -> Response:
     try:
         conn = sqlite3.connect(str(dbp))
         cur = conn.cursor()
-        cur.execute("SELECT id, user_id, action_type, table_name, record_id, old_value, new_value, ip_address, action_time FROM audit_logs ORDER BY action_time ASC")
+        cur.execute(
+            (
+                "SELECT id, user_id, action_type, table_name, record_id, old_value, new_value, "
+                "ip_address, action_time FROM audit_logs ORDER BY action_time ASC"
+            )
+        )
         rows = cur.fetchall()
         records = []
         for r in rows:
@@ -174,6 +208,8 @@ def export_audit(x_admin_key: str | None = Header(None)) -> Response:
     payload = json.dumps(records, default=str, ensure_ascii=False).encode("utf-8")
     sig = ""
     if settings.diagnostics_admin_key:
-        sig = hmac.new(settings.diagnostics_admin_key.encode("utf-8"), payload, hashlib.sha256).hexdigest()
+        sig = hmac.new(
+            settings.diagnostics_admin_key.encode("utf-8"), payload, hashlib.sha256
+        ).hexdigest()
     headers = {"X-Audit-Signature": sig} if sig else {}
     return Response(content=payload, media_type="application/json", headers=headers)

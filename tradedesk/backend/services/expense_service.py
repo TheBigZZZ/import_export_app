@@ -22,21 +22,38 @@ class ExpenseService:
         self.db = db
 
     async def list_expenses(self) -> list[Expense]:
-        rows = await self.db.execute(select(Expense).order_by(Expense.expense_date.desc(), Expense.id.desc()))
+        rows = await self.db.execute(
+            select(Expense).order_by(Expense.expense_date.desc(), Expense.id.desc())
+        )
         return list(rows.scalars().all())
 
-    async def create_expense(self, payload: ExpenseCreate, created_by: int | None) -> tuple[Expense, str]:
-        account_row = await self.db.execute(select(ChartOfAccount.id).where(ChartOfAccount.id == payload.account_id))
+    async def create_expense(
+        self, payload: ExpenseCreate, created_by: int | None
+    ) -> tuple[Expense, str]:
+        account_row = await self.db.execute(
+            select(ChartOfAccount.id).where(ChartOfAccount.id == payload.account_id)
+        )
         if account_row.scalar_one_or_none() is None:
-            raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Expense account not found")
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail="Expense account not found",
+            )
 
         payment_method = PaymentMethod(payload.payment_method)
         if payment_method == PaymentMethod.bank:
             if payload.bank_account_id is None:
-                raise HTTPException(status_code=status.HTTP_422_UNPROCESSABLE_ENTITY, detail="bank_account_id is required")
-            bank_row = await self.db.execute(select(BankAccount.id).where(BankAccount.id == payload.bank_account_id))
+                raise HTTPException(
+                    status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+                    detail="bank_account_id is required",
+                )
+            bank_row = await self.db.execute(
+                select(BankAccount.id).where(BankAccount.id == payload.bank_account_id)
+            )
             if bank_row.scalar_one_or_none() is None:
-                raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Bank account not found")
+                raise HTTPException(
+                    status_code=status.HTTP_404_NOT_FOUND,
+                    detail="Bank account not found",
+                )
 
         expense = Expense(
             expense_no=payload.expense_no,
@@ -51,7 +68,11 @@ class ExpenseService:
         )
         self.db.add(expense)
 
-        settlement_account_id = self.CASH_ACCOUNT_ID if payment_method == PaymentMethod.cash else self.BANK_ACCOUNT_ID
+        settlement_account_id = (
+            self.CASH_ACCOUNT_ID
+            if payment_method == PaymentMethod.cash
+            else self.BANK_ACCOUNT_ID
+        )
         voucher_type = "CPV" if payment_method == PaymentMethod.cash else "BPV"
         voucher = await VoucherService(self.db).create_voucher(
             VoucherCreate(

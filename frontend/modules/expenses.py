@@ -1,9 +1,10 @@
 from __future__ import annotations
 
-import asyncio
+import os
 from datetime import date
 
-from PySide6.QtWidgets import QComboBox, QFormLayout, QGroupBox, QHBoxLayout, QLabel, QLineEdit, QMessageBox, QPushButton
+from PySide6.QtWidgets import (QComboBox, QFormLayout, QGroupBox, QHBoxLayout,
+                               QLabel, QLineEdit, QMessageBox, QPushButton)
 
 from ..widgets.data_table import DataTable
 from .base import BaseModuleWidget
@@ -56,28 +57,92 @@ class ExpensesModule(BaseModuleWidget):
         self.layout().addWidget(self.table)
 
     def refresh(self) -> None:
-        try:
-            response = asyncio.run(self.api_client.get("/api/expenses"))
-            response.raise_for_status()
-            data = response.json()
-        except Exception as exc:
-            QMessageBox.warning(self, "Expenses", str(exc))
+        if os.environ.get("TRADEDESK_USE_QTASYNCIO"):
+
+            async def _async_fetch():
+                resp = await self.api_client.get("/api/expenses")
+                resp.raise_for_status()
+                return resp.json()
+
+            def _on_result(data):
+                try:
+                    rows = [
+                        [
+                            str(item["id"]),
+                            item["expense_no"],
+                            item["expense_date"],
+                            str(item.get("account_id")),
+                            str(item.get("amount")),
+                            item["payment_method"],
+                            str(item.get("bank_account_id") or ""),
+                            item["description"] or "",
+                        ]
+                        for item in data
+                    ]
+                    self.table.set_rows(
+                        [
+                            "ID",
+                            "No",
+                            "Date",
+                            "Account",
+                            "Amount",
+                            "Method",
+                            "Bank",
+                            "Description",
+                        ],
+                        rows,
+                        stretch_columns={7},
+                    )
+                except Exception as exc:
+                    QMessageBox.warning(self, "Expenses", str(exc))
+
+            def _on_error(exc):
+                QMessageBox.warning(self, "Expenses", str(exc))
+
+            self.run_async(_async_fetch(), on_result=_on_result, on_error=_on_error)
             return
 
-        rows = [
-            [
-                str(item["id"]),
-                item["expense_no"],
-                item["expense_date"],
-                str(item["account_id"]),
-                str(item["amount"]),
-                item["payment_method"],
-                str(item["bank_account_id"] or ""),
-                item["description"] or "",
-            ]
-            for item in data
-        ]
-        self.table.set_rows(["ID", "No", "Date", "Account", "Amount", "Method", "Bank", "Description"], rows, stretch_columns={7})
+        def _do_fetch():
+            resp = self.api_client.sync_get("/api/expenses")
+            resp.raise_for_status()
+            return resp.json()
+
+        def _on_result(data):
+            try:
+                rows = [
+                    [
+                        str(item["id"]),
+                        item["expense_no"],
+                        item["expense_date"],
+                        str(item.get("account_id")),
+                        str(item.get("amount")),
+                        item["payment_method"],
+                        str(item.get("bank_account_id") or ""),
+                        item["description"] or "",
+                    ]
+                    for item in data
+                ]
+                self.table.set_rows(
+                    [
+                        "ID",
+                        "No",
+                        "Date",
+                        "Account",
+                        "Amount",
+                        "Method",
+                        "Bank",
+                        "Description",
+                    ],
+                    rows,
+                    stretch_columns={7},
+                )
+            except Exception as exc:
+                QMessageBox.warning(self, "Expenses", str(exc))
+
+        def _on_error(exc):
+            QMessageBox.warning(self, "Expenses", str(exc))
+
+        self.run_blocking(_do_fetch, on_result=_on_result, on_error=_on_error)
 
     def create_expense(self) -> None:
         method = self.payment_method.currentText()
@@ -89,26 +154,65 @@ class ExpensesModule(BaseModuleWidget):
                 "account_id": int(self.expense_account_id.text()),
                 "amount": float(self.amount.text()),
                 "payment_method": method,
-                "bank_account_id": int(self.bank_account_id.text()) if self.bank_account_id.text().strip() else None,
+                "bank_account_id": (
+                    int(self.bank_account_id.text())
+                    if self.bank_account_id.text().strip()
+                    else None
+                ),
                 "description": self.description.text().strip() or None,
                 "reference": None,
             }
         except ValueError:
-            QMessageBox.warning(self, "Expenses", "Enter valid numeric account, amount and bank account IDs")
+            QMessageBox.warning(
+                self,
+                "Expenses",
+                "Enter valid numeric account, amount and bank account IDs",
+            )
             return
 
-        try:
-            response = asyncio.run(self.api_client.post("/api/expenses", json=payload))
-            response.raise_for_status()
-            data = response.json()
-        except Exception as exc:
+        if os.environ.get("TRADEDESK_USE_QTASYNCIO"):
+
+            async def _async_create():
+                resp = await self.api_client.post("/api/expenses", json=payload)
+                resp.raise_for_status()
+                return resp.json()
+
+            def _on_result(data):
+                try:
+                    self.status_label.setText(f"Posted voucher: {data['voucher_no']}")
+                except Exception:
+                    pass
+                self.expense_no.clear()
+                self.expense_account_id.clear()
+                self.amount.clear()
+                self.bank_account_id.clear()
+                self.description.clear()
+                self.refresh()
+
+            def _on_error(exc):
+                QMessageBox.warning(self, "Create Expense", str(exc))
+
+            self.run_async(_async_create(), on_result=_on_result, on_error=_on_error)
+            return
+
+        def _do_create():
+            resp = self.api_client.sync_post("/api/expenses", json=payload)
+            resp.raise_for_status()
+            return resp.json()
+
+        def _on_result(data):
+            try:
+                self.status_label.setText(f"Posted voucher: {data['voucher_no']}")
+            except Exception:
+                pass
+            self.expense_no.clear()
+            self.expense_account_id.clear()
+            self.amount.clear()
+            self.bank_account_id.clear()
+            self.description.clear()
+            self.refresh()
+
+        def _on_error(exc):
             QMessageBox.warning(self, "Create Expense", str(exc))
-            return
 
-        self.status_label.setText(f"Posted voucher: {data['voucher_no']}")
-        self.expense_no.clear()
-        self.expense_account_id.clear()
-        self.amount.clear()
-        self.bank_account_id.clear()
-        self.description.clear()
-        self.refresh()
+        self.run_blocking(_do_create, on_result=_on_result, on_error=_on_error)

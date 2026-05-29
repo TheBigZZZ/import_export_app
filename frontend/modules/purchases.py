@@ -1,9 +1,10 @@
 from __future__ import annotations
 
-import asyncio
+import os
 from datetime import date
 
-from PySide6.QtWidgets import QFormLayout, QGroupBox, QHBoxLayout, QLabel, QLineEdit, QMessageBox, QPushButton
+from PySide6.QtWidgets import (QFormLayout, QGroupBox, QHBoxLayout, QLabel,
+                               QLineEdit, QMessageBox, QPushButton)
 
 from ..widgets.data_table import DataTable
 from .base import BaseModuleWidget
@@ -56,25 +57,68 @@ class PurchasesModule(BaseModuleWidget):
         self.layout().addWidget(self.table)
 
     def refresh(self) -> None:
-        try:
-            response = asyncio.run(self.api_client.get("/api/purchases"))
-            response.raise_for_status()
-            rows_data = response.json()
-        except Exception as exc:
-            QMessageBox.warning(self, "Purchases", str(exc))
+        if os.environ.get("TRADEDESK_USE_QTASYNCIO"):
+
+            async def _async_fetch():
+                resp = await self.api_client.get("/api/purchases")
+                resp.raise_for_status()
+                return resp.json()
+
+            def _on_result(rows_data):
+                try:
+                    rows = [
+                        [
+                            str(item["id"]),
+                            item["po_no"],
+                            str(item["supplier_id"]),
+                            str(item.get("total_amount")),
+                            item["status"],
+                        ]
+                        for item in rows_data
+                    ]
+                    self.table.set_rows(
+                        ["ID", "PO", "Supplier", "Total", "Status"],
+                        rows,
+                        stretch_columns={1, 2},
+                    )
+                except Exception as exc:
+                    QMessageBox.warning(self, "Purchases", str(exc))
+
+            def _on_error(exc):
+                QMessageBox.warning(self, "Purchases", str(exc))
+
+            self.run_async(_async_fetch(), on_result=_on_result, on_error=_on_error)
             return
 
-        rows = [
-            [
-                str(item["id"]),
-                item["po_no"],
-                str(item["supplier_id"]),
-                str(item["total_amount"]),
-                item["status"],
-            ]
-            for item in rows_data
-        ]
-        self.table.set_rows(["ID", "PO", "Supplier", "Total", "Status"], rows, stretch_columns={1, 2})
+        def _do_fetch():
+            resp = self.api_client.sync_get("/api/purchases")
+            resp.raise_for_status()
+            return resp.json()
+
+        def _on_result(rows_data):
+            try:
+                rows = [
+                    [
+                        str(item["id"]),
+                        item["po_no"],
+                        str(item["supplier_id"]),
+                        str(item.get("total_amount")),
+                        item["status"],
+                    ]
+                    for item in rows_data
+                ]
+                self.table.set_rows(
+                    ["ID", "PO", "Supplier", "Total", "Status"],
+                    rows,
+                    stretch_columns={1, 2},
+                )
+            except Exception as exc:
+                QMessageBox.warning(self, "Purchases", str(exc))
+
+        def _on_error(exc):
+            QMessageBox.warning(self, "Purchases", str(exc))
+
+        self.run_blocking(_do_fetch, on_result=_on_result, on_error=_on_error)
 
     def create_order(self) -> None:
         try:
@@ -91,28 +135,82 @@ class PurchasesModule(BaseModuleWidget):
                 ],
             }
         except ValueError:
-            QMessageBox.warning(self, "Purchases", "Enter valid numeric supplier/product/quantity/price")
+            QMessageBox.warning(
+                self, "Purchases", "Enter valid numeric supplier/product/quantity/price"
+            )
             return
 
-        try:
-            response = asyncio.run(self.api_client.post("/api/purchases", json=payload))
-            response.raise_for_status()
-        except Exception as exc:
-            QMessageBox.warning(self, "Create Purchase", str(exc))
+        if os.environ.get("TRADEDESK_USE_QTASYNCIO"):
+
+            async def _async_create():
+                resp = await self.api_client.post("/api/purchases", json=payload)
+                resp.raise_for_status()
+                return resp
+
+            def _on_result(_):
+                self.refresh()
+
+            def _on_error(exc):
+                QMessageBox.warning(self, "Create Purchase", str(exc))
+
+            self.run_async(_async_create(), on_result=_on_result, on_error=_on_error)
             return
-        self.refresh()
+
+        def _do_create():
+            resp = self.api_client.sync_post("/api/purchases", json=payload)
+            resp.raise_for_status()
+            return resp
+
+        def _on_result(_):
+            self.refresh()
+
+        def _on_error(exc):
+            QMessageBox.warning(self, "Create Purchase", str(exc))
+
+        self.run_blocking(_do_create, on_result=_on_result, on_error=_on_error)
 
     def post_order_action(self) -> None:
         order_id = self.post_order_id.text().strip()
         if not order_id.isdigit():
             QMessageBox.warning(self, "Purchases", "Enter a valid order ID")
             return
-        try:
-            response = asyncio.run(self.api_client.post(f"/api/purchases/{order_id}/post", json={}))
-            response.raise_for_status()
-            payload = response.json()
-        except Exception as exc:
-            QMessageBox.warning(self, "Post Purchase", str(exc))
+        if os.environ.get("TRADEDESK_USE_QTASYNCIO"):
+
+            async def _async_post():
+                resp = await self.api_client.post(
+                    f"/api/purchases/{order_id}/post", json={}
+                )
+                resp.raise_for_status()
+                return resp.json()
+
+            def _on_result(payload):
+                try:
+                    self.result_label.setText(
+                        f"Posted voucher: {payload['voucher_no']}"
+                    )
+                except Exception:
+                    pass
+                self.refresh()
+
+            def _on_error(exc):
+                QMessageBox.warning(self, "Post Purchase", str(exc))
+
+            self.run_async(_async_post(), on_result=_on_result, on_error=_on_error)
             return
-        self.result_label.setText(f"Posted voucher: {payload['voucher_no']}")
-        self.refresh()
+
+        def _do_post():
+            resp = self.api_client.sync_post(f"/api/purchases/{order_id}/post", json={})
+            resp.raise_for_status()
+            return resp.json()
+
+        def _on_result(payload):
+            try:
+                self.result_label.setText(f"Posted voucher: {payload['voucher_no']}")
+            except Exception:
+                pass
+            self.refresh()
+
+        def _on_error(exc):
+            QMessageBox.warning(self, "Post Purchase", str(exc))
+
+        self.run_blocking(_do_post, on_result=_on_result, on_error=_on_error)

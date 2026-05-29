@@ -10,8 +10,13 @@ from typing import Tuple
 import httpx
 
 try:  # pragma: no cover - exercised indirectly in GUI environments
-    from PySide6.QtWidgets import QApplication, QDialog, QHBoxLayout, QLabel, QMessageBox, QProgressBar, QPushButton, QVBoxLayout
-except Exception:  # pragma: no cover - used in headless CI where Qt system libs are unavailable
+    from PySide6.QtWidgets import (QApplication, QDialog, QHBoxLayout, QLabel,
+                                   QMessageBox, QProgressBar, QPushButton,
+                                   QVBoxLayout)
+except (
+    Exception
+):  # pragma: no cover - used in headless CI where Qt system libs are unavailable
+
     class _QtBase:
         def __init__(self, *args, **kwargs):
             pass
@@ -123,7 +128,6 @@ except Exception:  # pragma: no cover - used in headless CI where Qt system libs
             self.clicked = self._Signal()
 
 
-
 _DOWNLOAD_TIMEOUT = 120.0
 _DOWNLOAD_CHUNK_SIZE = 1024 * 1024
 _MAX_DOWNLOAD_RETRIES = 3
@@ -190,12 +194,17 @@ class UpdateDialog(QDialog):
         self.setModal(True)
         self.setMinimumWidth(520)
 
-        self.title_label = QLabel(f"A new version ({remote_version}) is ready to install.")
+        self.title_label = QLabel(
+            f"A new version ({remote_version}) is ready to install."
+        )
         self.title_label.setWordWrap(True)
         self.title_label.setStyleSheet("font-size: 16px; font-weight: 600;")
 
         self.body_label = QLabel(
-            f"TradeDesk will download {installer_name} from GitHub, verify it, then launch the installer and close the current app."
+            (
+                f"TradeDesk will download {installer_name} from GitHub, verify it, "
+                "then launch the installer and close the current app."
+            )
         )
         self.body_label.setWordWrap(True)
 
@@ -254,9 +263,14 @@ class UpdateDialog(QDialog):
                         downloaded += len(chunk)
                         if total > 0:
                             percent = int((downloaded / total) * 100)
-                            self._set_progress(percent, f"Downloading update package... {_format_bytes(downloaded)} / {_format_bytes(total)}")
+                            self._set_progress(
+                                percent,
+                                f"Downloading update package... {_format_bytes(downloaded)} / {_format_bytes(total)}",
+                            )
                         else:
-                            self._set_busy(f"Downloading update package... {_format_bytes(downloaded)}")
+                            self._set_busy(
+                                f"Downloading update package... {_format_bytes(downloaded)}"
+                            )
         tmp_path.replace(target_path)
 
     def run_download(self, installer_url: str, target_path: Path) -> None:
@@ -287,6 +301,10 @@ def check_for_update(parent, current_version: str) -> bool:
         manifest_url = "https://github.com/TheBigZZZ/import_export_app/releases/latest/download/updates.json"
 
     try:
+        # Prevent concurrent update flows in the same process.
+        if globals().get("_UPDATE_IN_PROGRESS"):
+            return False
+        globals()["_UPDATE_IN_PROGRESS"] = True
         # follow redirects: GitHub release asset URLs may redirect
         with httpx.Client(timeout=10.0, follow_redirects=True) as client:
             resp = client.get(manifest_url)
@@ -307,7 +325,9 @@ def check_for_update(parent, current_version: str) -> bool:
         return False
 
     try:
-        if _parse_version(remote_ver) <= _parse_version(_clean_version_label(current_version)):
+        if _parse_version(remote_ver) <= _parse_version(
+            _clean_version_label(current_version)
+        ):
             return False
     except Exception:
         return False
@@ -335,7 +355,9 @@ def check_for_update(parent, current_version: str) -> bool:
             raise last_error
 
         # Enforce checksum validation unless explicitly bypassed for local testing.
-        allow_unsigned = os.environ.get("TRADEDESK_ALLOW_UNSIGNED_UPDATE", "").strip().lower() in {
+        allow_unsigned = os.environ.get(
+            "TRADEDESK_ALLOW_UNSIGNED_UPDATE", ""
+        ).strip().lower() in {
             "1",
             "true",
             "yes",
@@ -347,15 +369,19 @@ def check_for_update(parent, current_version: str) -> bool:
         elif not allow_unsigned:
             raise RuntimeError("Update manifest missing installer checksum.")
 
-        # Attempt to launch installer (non-blocking)
+        # Attempt to launch installer (non-blocking) and mark that we've launched.
         prompt.set_launching()
-        if os.name == "nt":
-            subprocess.Popen([str(out)], shell=False)
-        else:
-            subprocess.Popen(["chmod", "+x", str(out)])
-            subprocess.Popen([str(out)])
-        return True
+        try:
+            if os.name == "nt":
+                subprocess.Popen([str(out)], shell=False)
+            else:
+                subprocess.Popen(["chmod", "+x", str(out)])
+                subprocess.Popen([str(out)])
+            return True
+        finally:
+            globals()["_UPDATE_IN_PROGRESS"] = False
     except Exception:
+        globals()["_UPDATE_IN_PROGRESS"] = False
         err = QMessageBox()
         err.setIcon(QMessageBox.Warning)
         err.setWindowTitle("Update Failed")

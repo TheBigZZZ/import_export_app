@@ -2,8 +2,8 @@ from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from ..database import get_db
-from ..services.user_service import UserService
 from ..schemas.user import UserCreate, UserRead
+from ..services.user_service import UserService
 
 router = APIRouter()
 
@@ -23,7 +23,9 @@ async def create_initial_admin(payload: UserCreate, db: AsyncSession = Depends(g
     svc = UserService(db)
     users = await svc.list_users()
     if users:
-        raise HTTPException(status_code=400, detail="Initial setup has already been completed")
+        raise HTTPException(
+            status_code=400, detail="Initial setup has already been completed"
+        )
 
     # Force role to super_admin to ensure initial user has full privileges
     payload.role = "super_admin"

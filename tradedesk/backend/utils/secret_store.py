@@ -1,10 +1,8 @@
 from __future__ import annotations
 
 import json
+import logging
 import os
-from pathlib import Path
-import base64
-from typing import Any
 
 import keyring
 
@@ -14,6 +12,8 @@ except Exception:  # pragma: no cover - optional encryption fallback
     Fernet = None  # type: ignore
 
 from ..config import settings
+
+logger = logging.getLogger(__name__)
 
 
 class SecretStore:
@@ -33,8 +33,18 @@ class SecretStore:
         self._key_path = settings.data_dir / self._key_file
         self._secrets_path = settings.data_dir / self._secrets_file
         self._fernet = None
+        self._warned_keyring_fallback = False
         if Fernet is not None:
             self._ensure_key()
+
+    def _log_keyring_fallback(self, exc: Exception) -> None:
+        if self._warned_keyring_fallback:
+            return
+        self._warned_keyring_fallback = True
+        logger.warning(
+            "OS keyring unavailable for tradedesk secrets; using local file fallback: %s",
+            exc,
+        )
 
     def _ensure_key(self) -> None:
         if self._fernet is not None:
@@ -80,9 +90,9 @@ class SecretStore:
             v = keyring.get_password(self.SERVICE_NAME, key)
             if v:
                 return v
-        except Exception:
+        except Exception as exc:
             # Keyring failure; fall through to file store
-            pass
+            self._log_keyring_fallback(exc)
 
         store = self._load_file_store()
         return store.get(key)
@@ -92,8 +102,8 @@ class SecretStore:
         try:
             keyring.set_password(self.SERVICE_NAME, key, value)
             return
-        except Exception:
-            pass
+        except Exception as exc:
+            self._log_keyring_fallback(exc)
 
         store = self._load_file_store()
         store[key] = value
@@ -102,8 +112,8 @@ class SecretStore:
     def delete(self, key: str) -> None:
         try:
             keyring.delete_password(self.SERVICE_NAME, key)
-        except Exception:
-            pass
+        except Exception as exc:
+            self._log_keyring_fallback(exc)
         store = self._load_file_store()
         if key in store:
             store.pop(key)

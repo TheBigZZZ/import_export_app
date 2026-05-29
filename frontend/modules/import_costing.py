@@ -1,9 +1,10 @@
 from __future__ import annotations
 
-import asyncio
+import os
 from datetime import date
 
-from PySide6.QtWidgets import QFormLayout, QGroupBox, QHBoxLayout, QLabel, QLineEdit, QMessageBox, QPushButton
+from PySide6.QtWidgets import (QFormLayout, QGroupBox, QHBoxLayout, QLabel,
+                               QLineEdit, QMessageBox, QPushButton)
 
 from ..widgets.data_table import DataTable
 from .base import BaseModuleWidget
@@ -60,25 +61,68 @@ class ImportCostingModule(BaseModuleWidget):
         self.layout().addWidget(self.table)
 
     def refresh(self) -> None:
-        try:
-            response = asyncio.run(self.api_client.get("/api/imports"))
-            response.raise_for_status()
-            rows_data = response.json()
-        except Exception as exc:
-            QMessageBox.warning(self, "Imports", str(exc))
+        if os.environ.get("TRADEDESK_USE_QTASYNCIO"):
+
+            async def _async_fetch():
+                resp = await self.api_client.get("/api/imports")
+                resp.raise_for_status()
+                return resp.json()
+
+            def _on_result(rows_data):
+                try:
+                    rows = [
+                        [
+                            str(item["id"]),
+                            item["lc_no"] or "",
+                            str(item["supplier_id"]),
+                            str(item.get("total_landed_cost")),
+                            item["status"],
+                        ]
+                        for item in rows_data
+                    ]
+                    self.table.set_rows(
+                        ["ID", "LC", "Supplier", "Landed Cost", "Status"],
+                        rows,
+                        stretch_columns={1},
+                    )
+                except Exception as exc:
+                    QMessageBox.warning(self, "Imports", str(exc))
+
+            def _on_error(exc):
+                QMessageBox.warning(self, "Imports", str(exc))
+
+            self.run_async(_async_fetch(), on_result=_on_result, on_error=_on_error)
             return
 
-        rows = [
-            [
-                str(item["id"]),
-                item["lc_no"] or "",
-                str(item["supplier_id"]),
-                str(item["total_landed_cost"]),
-                item["status"],
-            ]
-            for item in rows_data
-        ]
-        self.table.set_rows(["ID", "LC", "Supplier", "Landed Cost", "Status"], rows, stretch_columns={1})
+        def _do_fetch():
+            resp = self.api_client.sync_get("/api/imports")
+            resp.raise_for_status()
+            return resp.json()
+
+        def _on_result(rows_data):
+            try:
+                rows = [
+                    [
+                        str(item["id"]),
+                        item["lc_no"] or "",
+                        str(item["supplier_id"]),
+                        str(item.get("total_landed_cost")),
+                        item["status"],
+                    ]
+                    for item in rows_data
+                ]
+                self.table.set_rows(
+                    ["ID", "LC", "Supplier", "Landed Cost", "Status"],
+                    rows,
+                    stretch_columns={1},
+                )
+            except Exception as exc:
+                QMessageBox.warning(self, "Imports", str(exc))
+
+        def _on_error(exc):
+            QMessageBox.warning(self, "Imports", str(exc))
+
+        self.run_blocking(_do_fetch, on_result=_on_result, on_error=_on_error)
 
     def create_shipment(self) -> None:
         try:
@@ -100,28 +144,70 @@ class ImportCostingModule(BaseModuleWidget):
                 ],
             }
         except ValueError:
-            QMessageBox.warning(self, "Imports", "Enter valid numeric supplier/product/quantity/cost values")
+            QMessageBox.warning(
+                self,
+                "Imports",
+                "Enter valid numeric supplier/product/quantity/cost values",
+            )
             return
 
-        try:
-            response = asyncio.run(self.api_client.post("/api/imports", json=payload))
-            response.raise_for_status()
-        except Exception as exc:
+        def _do_create():
+            resp = self.api_client.sync_post("/api/imports", json=payload)
+            resp.raise_for_status()
+            return resp
+
+        def _on_result(_):
+            self.refresh()
+
+        def _on_error(exc):
             QMessageBox.warning(self, "Create Import Shipment", str(exc))
-            return
-        self.refresh()
+
+        self.run_blocking(_do_create, on_result=_on_result, on_error=_on_error)
 
     def post_shipment_action(self) -> None:
         shipment_id = self.post_shipment_id.text().strip()
         if not shipment_id.isdigit():
             QMessageBox.warning(self, "Imports", "Enter a valid shipment ID")
             return
-        try:
-            response = asyncio.run(self.api_client.post(f"/api/imports/{shipment_id}/post", json={}))
-            response.raise_for_status()
-            payload = response.json()
-        except Exception as exc:
-            QMessageBox.warning(self, "Post Import Shipment", str(exc))
+        if os.environ.get("TRADEDESK_USE_QTASYNCIO"):
+
+            async def _async_post():
+                resp = await self.api_client.post(
+                    f"/api/imports/{shipment_id}/post", json={}
+                )
+                resp.raise_for_status()
+                return resp.json()
+
+            def _on_result(payload):
+                try:
+                    self.result_label.setText(
+                        f"Posted voucher: {payload['voucher_no']}"
+                    )
+                except Exception:
+                    pass
+                self.refresh()
+
+            def _on_error(exc):
+                QMessageBox.warning(self, "Post Import Shipment", str(exc))
+
+            self.run_async(_async_post(), on_result=_on_result, on_error=_on_error)
             return
-        self.result_label.setText(f"Posted voucher: {payload['voucher_no']}")
-        self.refresh()
+
+        def _do_post():
+            resp = self.api_client.sync_post(
+                f"/api/imports/{shipment_id}/post", json={}
+            )
+            resp.raise_for_status()
+            return resp.json()
+
+        def _on_result(payload):
+            try:
+                self.result_label.setText(f"Posted voucher: {payload['voucher_no']}")
+            except Exception:
+                pass
+            self.refresh()
+
+        def _on_error(exc):
+            QMessageBox.warning(self, "Post Import Shipment", str(exc))
+
+        self.run_blocking(_do_post, on_result=_on_result, on_error=_on_error)

@@ -1,8 +1,16 @@
 from __future__ import annotations
 
-import os
 import multiprocessing
+import os
 import sys
+
+# Ensure optional async DB driver is referenced so PyInstaller includes it
+try:
+    import aiosqlite  # noqa: F401
+except Exception:
+    # If not available in the build environment, backend will fail loudly
+    # at runtime; import here ensures PyInstaller bundles the module.
+    pass
 
 
 def run() -> int:

@@ -8,8 +8,10 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from ..models.product import Product
 from ..models.stock_ledger import StockLedger, StockMovementType
-from ..schemas.inventory import ProductCreate, ProductUpdate, StockMovementCreate
-from .inventory_service import apply_stock_movement, validate_document_is_posted
+from ..schemas.inventory import (ProductCreate, ProductUpdate,
+                                 StockMovementCreate)
+from .inventory_service import (apply_stock_movement,
+                                validate_document_is_posted)
 from .settings_service import SettingsService
 
 
@@ -18,7 +20,9 @@ class ProductService:
         self.db = db
 
     async def list_products(self) -> list[Product]:
-        rows = await self.db.execute(select(Product).order_by(Product.product_code.asc()))
+        rows = await self.db.execute(
+            select(Product).order_by(Product.product_code.asc())
+        )
         return list(rows.scalars().all())
 
     async def get_product(self, product_id: int) -> Product | None:
@@ -53,19 +57,25 @@ class ProductService:
         await self.db.refresh(product)
         return product
 
-    async def create_stock_movement(self, payload: StockMovementCreate, created_by: int | None) -> StockLedger:
+    async def create_stock_movement(
+        self, payload: StockMovementCreate, created_by: int | None
+    ) -> StockLedger:
         validate_document_is_posted(payload.document_status)
 
         product = await self.get_product(payload.product_id)
         if not product:
-            raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Product not found")
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND, detail="Product not found"
+            )
 
         quantity = Decimal(payload.quantity)
         movement_type = StockMovementType(payload.movement_type)
         signed_qty = -quantity if movement_type == StockMovementType.OUT else quantity
 
         app_settings = SettingsService().get_settings()
-        allow_negative_stock = bool(app_settings.get("allow_negative_stock")) or payload.allow_negative
+        allow_negative_stock = (
+            bool(app_settings.get("allow_negative_stock")) or payload.allow_negative
+        )
 
         new_stock = apply_stock_movement(
             current_stock=Decimal(product.current_stock),
@@ -99,10 +109,14 @@ class ProductService:
         await self.db.refresh(movement)
         return movement
 
-    async def stock_ledger(self, product_id: int, limit: int = 200) -> tuple[Product, list[StockLedger]]:
+    async def stock_ledger(
+        self, product_id: int, limit: int = 200
+    ) -> tuple[Product, list[StockLedger]]:
         product = await self.get_product(product_id)
         if not product:
-            raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Product not found")
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND, detail="Product not found"
+            )
 
         rows = await self.db.execute(
             select(StockLedger)

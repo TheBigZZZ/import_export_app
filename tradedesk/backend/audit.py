@@ -8,22 +8,10 @@ from enum import Enum
 from sqlalchemy import event, inspect
 
 from .live import LiveEvent, broadcast_live_event
-
-from .models import (
-    BankAccount,
-    ChartOfAccount,
-    Customer,
-    Expense,
-    ImportShipment,
-    ImportShipmentItem,
-    Product,
-    PurchaseOrder,
-    SalesInvoice,
-    SalesInvoiceItem,
-    Supplier,
-    Transaction,
-    User,
-)
+from .models import (BankAccount, ChartOfAccount, Customer, Expense,
+                     ImportShipment, ImportShipmentItem, Product,
+                     PurchaseOrder, SalesInvoice, SalesInvoiceItem, Supplier,
+                     Transaction, User)
 from .models.audit_log import AuditLog
 
 AUDITED_MODELS = [
@@ -74,7 +62,9 @@ def _old_snapshot(target) -> dict:
     return old_data
 
 
-def _insert_audit(connection, action_type: str, target, old_value: dict | None, new_value: dict | None) -> None:
+def _insert_audit(
+    connection, action_type: str, target, old_value: dict | None, new_value: dict | None
+) -> None:
     user_id = getattr(target, "created_by", None)
     record_id = getattr(target, "id", None)
     connection.execute(
@@ -92,7 +82,9 @@ def _insert_audit(connection, action_type: str, target, old_value: dict | None, 
 
 
 def _after_insert(mapper, connection, target) -> None:
-    _insert_audit(connection, "insert", target, old_value=None, new_value=_snapshot(target))
+    _insert_audit(
+        connection, "insert", target, old_value=None, new_value=_snapshot(target)
+    )
     broadcast_live_event(
         LiveEvent(
             event_type="entity.changed",
@@ -105,7 +97,13 @@ def _after_insert(mapper, connection, target) -> None:
 
 
 def _after_update(mapper, connection, target) -> None:
-    _insert_audit(connection, "update", target, old_value=_old_snapshot(target), new_value=_snapshot(target))
+    _insert_audit(
+        connection,
+        "update",
+        target,
+        old_value=_old_snapshot(target),
+        new_value=_snapshot(target),
+    )
     broadcast_live_event(
         LiveEvent(
             event_type="entity.changed",
@@ -118,7 +116,9 @@ def _after_update(mapper, connection, target) -> None:
 
 
 def _after_delete(mapper, connection, target) -> None:
-    _insert_audit(connection, "delete", target, old_value=_snapshot(target), new_value=None)
+    _insert_audit(
+        connection, "delete", target, old_value=_snapshot(target), new_value=None
+    )
     broadcast_live_event(
         LiveEvent(
             event_type="entity.changed",
