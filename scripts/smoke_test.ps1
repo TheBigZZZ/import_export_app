@@ -286,8 +286,17 @@ Write-Host $restoreOutput
 if ($LASTEXITCODE -ne 0) { ExitWithFailure "Restore command failed: $restoreOutput" }
 
 Write-Host "Restarting app..."
+$restartLaunchUtc = [DateTime]::UtcNow
+$env:TRADEDESK_HEADLESS_SMOKE = '1'
 $proc2 = Start-Process -FilePath $exePath -PassThru
-if (-Not (Wait-ForHealth -Url $healthUrl -TimeoutSec 60)) { $proc2 | Stop-Process -Force -ErrorAction SilentlyContinue; ExitWithFailure 'Health endpoint not available after restore and restart' }
+Remove-Item Env:\TRADEDESK_HEADLESS_SMOKE -ErrorAction SilentlyContinue
+$restartSentinel = Wait-ForStartupSentinel -TimeoutSec 60 -AfterUtc $restartLaunchUtc
+if ($restartSentinel) { Write-Host "Found backend restart sentinel: $restartSentinel" }
+if (-Not (Wait-ForHealth -Url $healthUrl -TimeoutSec 60 -Proc $proc2 -ErrorFile $err)) {
+    Show-BackendLogs -ErrorFile $err -LogFile $backendLog
+    $proc2 | Stop-Process -Force -ErrorAction SilentlyContinue
+    ExitWithFailure 'Health endpoint not available after restore and restart'
+}
 
 Write-Host "Verifying restored data: fetch customer list and locate id $($custResp.id)"
 $custCheckUrl = 'http://127.0.0.1:8742/api/customers'
