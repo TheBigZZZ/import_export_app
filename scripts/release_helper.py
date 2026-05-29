@@ -36,15 +36,33 @@ def main(argv: list[str] | None = None) -> int:
         return 2
 
     # 3) run smoke test (powershell wrapper)
-    run(["powershell", "-ExecutionPolicy", "Bypass", "-File", "./scripts/smoke_test.ps1", "-ExePath", str(exe), "-Timeout", "180"])
+    run([
+        "powershell",
+        "-ExecutionPolicy",
+        "Bypass",
+        "-File",
+        "./scripts/smoke_test.ps1",
+        "-ExePath",
+        str(exe),
+        "-Timeout",
+        "180",
+    ])
 
     # 4) create updates.json manifest (local)
     installer = Path("dist") / "TradeDeskERP-Setup.exe"
     manifest = Path("updates.json")
     if installer.exists():
         import hashlib
+
         h = hashlib.sha256(installer.read_bytes()).hexdigest()
-        manifest.write_text(f"{{\n  \"version\": \"{tag}\",\n  \"installer_url\": \"https://example.com/{installer.name}\",\n  \"installer_sha256\": \"{h}\",\n  \"published_at\": \"TODO\"\n}}\n")
+        manifest.write_text(
+            f"{{\n"
+            f"  \"version\": \"{tag}\",\n"
+            f"  \"installer_url\": \"https://example.com/{installer.name}\",\n"
+            f"  \"installer_sha256\": \"{h}\",\n"
+            f"  \"published_at\": \"TODO\"\n"
+            f"}}\n"
+        )
         print("Written updates.json manifest for manual upload")
     else:
         print("Installer not found; skipping updates.json creation")

@@ -190,6 +190,7 @@ class BackendManager:
                         except Exception:
                             pass
                         # simple fake proc for compatibility
+
                         class _FakeProc:
                             def __init__(self):
                                 self.pid = -1

@@ -12,7 +12,6 @@ import argparse
 import os
 import subprocess
 import sys
-import tempfile
 from pathlib import Path
 
 
@@ -50,8 +49,6 @@ def main(argv: list[str] | None = None) -> int:
     backup = sorted(candidates, key=os.path.getmtime)[-1]
     print("Backup created:", backup)
 
-    # Restore to temp
-    tmp = Path(tempfile.gettempdir()) / f"tradedesk_restore_test_{os.getpid()}.db"
     rc2, out2 = run_cmd([python, "-m", "tradedesk.backend.cli", "--restore-db", str(backup)])
     print(out2)
     if rc2 != 0:

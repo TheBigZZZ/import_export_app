@@ -10,12 +10,12 @@ ROOT = Path(__file__).resolve().parents[1]
 if str(ROOT) not in sys.path:
     sys.path.insert(0, str(ROOT))
 
-from tradedesk.backend.bootstrap import DEFAULT_ACCOUNTS
-from tradedesk.backend.config import settings
-from tradedesk.backend.database import Base, get_db
-from tradedesk.backend.models.account import ChartOfAccount
-from tradedesk.backend.models.user import User
-from tradedesk.backend.security import hash_password
+from tradedesk.backend.bootstrap import DEFAULT_ACCOUNTS  # noqa: E402
+from tradedesk.backend.config import settings  # noqa: E402
+from tradedesk.backend.database import Base, get_db  # noqa: E402
+from tradedesk.backend.models.account import ChartOfAccount  # noqa: E402
+from tradedesk.backend.models.user import User  # noqa: E402
+from tradedesk.backend.security import hash_password  # noqa: E402
 
 
 @pytest_asyncio.fixture
